@@ -1,5 +1,3 @@
-
-
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
 local BSP = Enum.BorderStrokePosition
@@ -1234,6 +1232,142 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	Add("UIShadow", { Parent = OptionList; BlurRadius = UD(0, 20); Spread = UFO(5, 5); Transparency = 0.65; })
 	Add("UIListLayout", { Parent = OptionList; SortOrder = SO.LayoutOrder; })
 
+	-- Expanded multi-select panel (maximize): horizontal chips + Select All / Deselect All
+	local ExpandPanel = Add("Frame", {
+		Parent = Library._Instance;
+		Name = "DropdownExpand";
+		BackgroundColor3 = Library.Theme.Surface;
+		BorderSizePixel = 0;
+		Size = UFO(340, 0);
+		AutomaticSize = AS.Y;
+		Visible = false;
+		ZIndex = PopupZ + 1;
+		Active = true;
+	}) :: Frame
+	Library.ThemeLink(ExpandPanel, "BackgroundColor3", "Surface")
+	Add("UICorner", { Parent = ExpandPanel; CornerRadius = UD(0, 8); })
+	local ExpandStroke = Add("UIStroke", { Parent = ExpandPanel; ApplyStrokeMode = ASM.Border; Color = Library.Theme.Border; })
+	Library.ThemeLink(ExpandStroke, "Color", "Border")
+	Add("UIShadow", { Parent = ExpandPanel; BlurRadius = UD(0, 22); Spread = UFO(5, 5); Transparency = 0.6; })
+	Add("UIPadding", {
+		Parent = ExpandPanel;
+		PaddingTop = UD(0, 10);
+		PaddingBottom = UD(0, 12);
+		PaddingLeft = UD(0, 12);
+		PaddingRight = UD(0, 12);
+	})
+	Add("UIListLayout", { Parent = ExpandPanel; Padding = UD(0, 10); SortOrder = SO.LayoutOrder; })
+
+	local ExpandHeader = Add("Frame", {
+		Parent = ExpandPanel;
+		Name = "Header";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 28);
+		LayoutOrder = 0;
+	})
+	Add("TextLabel", {
+		Parent = ExpandHeader;
+		BackgroundTransparency = 1;
+		Size = UD2(1, -70, 1, 0);
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = Dropdown.Name ~= "" and Dropdown.Name or "Options";
+		TextColor3 = Library.Theme.Text;
+		TextSize = 13;
+		TextXAlignment = TXA.Left;
+		TextTruncate = ETT.AtEnd;
+	})
+	local ExpandClose = Add("TextButton", {
+		Parent = ExpandHeader;
+		AnchorPoint = V2(1, 0.5);
+		Position = UD2(1, 0, 0.5, 0);
+		Size = UFO(22, 22);
+		BackgroundTransparency = 1;
+		Text = "×";
+		TextColor3 = RGB(160, 164, 180);
+		TextSize = 16;
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		AutoButtonColor = false;
+	})
+
+	local ExpandActions = Add("Frame", {
+		Parent = ExpandPanel;
+		Name = "Actions";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 28);
+		LayoutOrder = 1;
+		Visible = Dropdown.Multi == true;
+	})
+	Add("UIListLayout", {
+		Parent = ExpandActions;
+		FillDirection = FD.Horizontal;
+		Padding = UD(0, 8);
+		SortOrder = SO.LayoutOrder;
+	})
+	local function MakeActionBtn(Text: string, Order: number): TextButton
+		local B = Add("TextButton", {
+			Parent = ExpandActions;
+			AutoButtonColor = false;
+			BackgroundColor3 = Library.Theme.SurfaceAlt;
+			BorderSizePixel = 0;
+			Size = UFO(0, 28);
+			AutomaticSize = AS.X;
+			Text = Text;
+			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+			TextSize = 12;
+			TextColor3 = Library.Theme.Text;
+			TextTransparency = 0.15;
+			LayoutOrder = Order;
+		})
+		Add("UICorner", { Parent = B; CornerRadius = UD(0, 6); })
+		Add("UIPadding", { Parent = B; PaddingLeft = UD(0, 12); PaddingRight = UD(0, 12); })
+		Library.ThemeLink(B, "BackgroundColor3", "SurfaceAlt")
+		B.MouseEnter:Connect(function()
+			Tween(B, { BackgroundColor3 = Library.Theme.AccentDark; TextTransparency = 0 }, 0.1)
+		end)
+		B.MouseLeave:Connect(function()
+			Tween(B, { BackgroundColor3 = Library.Theme.SurfaceAlt; TextTransparency = 0.15 }, 0.1)
+		end)
+		return B
+	end
+	local SelectAllBtn = MakeActionBtn("Select all", 1)
+	local DeselectAllBtn = MakeActionBtn("Deselect all", 2)
+
+	local ChipScroll = Add("ScrollingFrame", {
+		Parent = ExpandPanel;
+		Name = "Chips";
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Size = UD2(1, 0, 0, 72);
+		CanvasSize = UD2(0, 0, 0, 0);
+		AutomaticCanvasSize = AS.XY;
+		ScrollBarThickness = 3;
+		ScrollBarImageColor3 = Library.Theme.Accent;
+		ScrollingDirection = SBD.XY;
+		LayoutOrder = 2;
+		ClipsDescendants = true;
+	})
+	Library.ThemeLink(ChipScroll, "ScrollBarImageColor3", "Accent")
+	local ChipHost = Add("Frame", {
+		Parent = ChipScroll;
+		Name = "Host";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 0);
+		AutomaticSize = AS.XY;
+	})
+	-- Horizontal chip row (scrolls when many options). Wraps when engine supports UIListLayout.Wraps.
+	local ChipLayout = Add("UIListLayout", {
+		Parent = ChipHost;
+		FillDirection = FD.Horizontal;
+		Padding = UD(0, 6);
+		SortOrder = SO.LayoutOrder;
+		HorizontalAlignment = HFA.Left;
+		VerticalAlignment = VFA.Top;
+	})
+	pcall(function()
+		(ChipLayout :: any).Wraps = true
+	end)
+	Add("UIPadding", { Parent = ChipHost; PaddingBottom = UD(0, 4); PaddingRight = UD(0, 4); })
+
 	local ButtonFrame = Add("Frame", { Parent = self.Content; Name = "ButtonFrame"; Active = true; AutomaticSize = AS.Y; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(1, 0); }) :: Frame
 	local InputFrame = Add("Frame", { Parent = ButtonFrame; Name = "InputFrame"; Active = true; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(0, 18); Selectable = true; Size = UD2(1, 0, 0, 22); }) :: Frame
 	Library.ThemeLink(InputFrame, "BackgroundColor3", "SurfaceAlt")
@@ -1241,9 +1375,32 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	Add("UICorner", { Parent = InputFrame; CornerRadius = UD(0, 5); })
 	Add("UIPadding", { Parent = InputFrame; PaddingLeft = UD(0, 10); PaddingRight = UD(0, 10); })
 	local Icon = Add("ImageLabel", { Parent = InputFrame; Name = "Icon"; AnchorPoint = V2(1, 0.5); BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Image = "rbxassetid://95865107607162"; ImageTransparency = 0.2; Position = UFS(1, 0.5); ResampleMode = Enum.ResamplerMode.Pixelated; ScaleType = SCL.Fit; Size = UFO(14, 14); }) :: ImageLabel
-	local InputText = Add("TextButton", { Parent = InputFrame; Name = "Input"; BackgroundColor3 = RGB(20, 20, 21); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Size = UD2(1, -24, 1, 0); Text = ""; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.2; TextTruncate = ETT.SplitWord; TextXAlignment = TXA.Left; }) :: TextButton
+	-- Maximize / expand (especially useful for Multi)
+	local ExpandBtn = Add("ImageButton", {
+		Parent = InputFrame;
+		Name = "Expand";
+		AutoButtonColor = false;
+		AnchorPoint = V2(1, 0.5);
+		Position = UD2(1, -18, 0.5, 0);
+		Size = UFO(14, 14);
+		BackgroundTransparency = 1;
+		Image = "rbxassetid://10734900011"; -- move / expand-style glyph from Lucide map fallback
+		ImageTransparency = 0.35;
+		ResampleMode = Enum.ResamplerMode.Pixelated;
+		ScaleType = SCL.Fit;
+		Visible = true;
+		ZIndex = 2;
+	}) :: ImageButton
+	pcall(function()
+		local Id = ResolveIcon("maximize-2")
+		if Id == "" then Id = ResolveIcon("move") end
+		if Id ~= "" then ExpandBtn.Image = Id end
+	end)
+	local InputText = Add("TextButton", { Parent = InputFrame; Name = "Input"; BackgroundColor3 = RGB(20, 20, 21); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Size = UD2(1, -40, 1, 0); Text = ""; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.2; TextTruncate = ETT.SplitWord; TextXAlignment = TXA.Left; }) :: TextButton
 
 	local Buttons = {}
+	local ExpandChips = {} :: { TextButton }
+	local ExpandOpen = false
 
 	local function GetMultiValue(): { string }
 		if type(Dropdown.Value) ~= "table" then
@@ -1268,12 +1425,22 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 				BackgroundColor3 = Selected and RGB(28, 30, 38) or RGB(20, 20, 21);
 			}, 0.1)
 		end
+		for _, Chip in ExpandChips do
+			local Selected = IsSelected(Chip:GetAttribute("Option") or Chip.Text)
+			local On = Selected == true
+			Chip.BackgroundColor3 = On and Library.Theme.Accent or Library.Theme.SurfaceAlt
+			Chip.TextColor3 = On and RGB(12, 12, 14) or Library.Theme.Text
+			Chip.TextTransparency = On and 0 or 0.25
+			local Grad = Chip:FindFirstChildOfClass("UIGradient")
+			if Grad then Grad.Enabled = On end
+		end
 	end
 
 	local function Choose(Option: string)
 		if not Dropdown.Multi then
 			Dropdown.Set(Option)
 			Dropdown.Open(false)
+			Dropdown.OpenExpand(false)
 			return
 		end
 
@@ -1287,6 +1454,54 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		end
 
 		Dropdown.Set(Selected)
+	end
+
+	local function BuildExpand()
+		for _, Chip in ExpandChips do
+			Chip:Destroy()
+		end
+		table.clear(ExpandChips)
+
+		local Filter = SearchBoxDrop and SearchBoxDrop.Text:lower() or ""
+		for Index, Option in Dropdown.Options do
+			if Filter == "" or tostring(Option):lower():find(Filter, 1, true) then
+			local Chip = Add("TextButton", {
+				Parent = ChipHost;
+				Name = tostring(Option);
+				AutoButtonColor = false;
+				AutomaticSize = AS.X;
+				Size = UFO(0, 28);
+				BackgroundColor3 = Library.Theme.SurfaceAlt;
+				BorderSizePixel = 0;
+				FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+				Text = tostring(Option);
+				TextSize = 12;
+				TextColor3 = Library.Theme.Text;
+				TextTransparency = 0.25;
+				LayoutOrder = Index;
+			}) :: TextButton
+			Chip:SetAttribute("Option", tostring(Option))
+			Add("UICorner", { Parent = Chip; CornerRadius = UD(0, 6); })
+			Add("UIPadding", { Parent = Chip; PaddingLeft = UD(0, 12); PaddingRight = UD(0, 12); })
+			local ChipGrad = Add("UIGradient", {
+				Parent = Chip;
+				Color = CS{ CSK(0, Library.Theme.AccentDark), CSK(1, Library.Theme.Accent) };
+				Rotation = -90;
+				Enabled = false;
+			})
+			Library.ThemeLink(ChipGrad, "Gradient", "AccentDark", "Accent")
+			Chip.Activated:Connect(function()
+				Choose(tostring(Option))
+			end)
+			TIS(ExpandChips, Chip)
+			end
+		end
+		Highlight()
+		task.defer(function()
+			if not ChipHost.Parent then return end
+			local ContentH = math.max(ChipHost.AbsoluteSize.Y, 32)
+			ChipScroll.Size = UD2(1, 0, 0, math.clamp(ContentH + 8, 40, 140))
+		end)
 	end
 
 	local SearchBoxDrop = nil
@@ -1391,6 +1606,9 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	Dropdown.UpdateOptions = function(NewOptions: { string })
 		Dropdown.Options = NewOptions
 		Build()
+		if ExpandPanel.Visible then
+			BuildExpand()
+		end
 
 		if Dropdown.Multi then
 			local Kept = {}
@@ -1409,9 +1627,44 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 
 	Dropdown.Frame = OptionList
 	Dropdown.Button = ButtonFrame
+	Dropdown.ExpandPanel = ExpandPanel
+
+	Dropdown.OpenExpand = function(State: boolean?)
+		if State == nil then
+			State = not ExpandPanel.Visible
+		end
+		ExpandOpen = State == true
+		if State then
+			-- close compact list first
+			OptionList.Visible = false
+			Tween(Icon, { Rotation = 0 }, 0.12)
+			BuildExpand()
+			Dropdown.Frame = ExpandPanel -- click-outside treats expand as popup root
+			ClaimPopup(Dropdown)
+			ExpandActions.Visible = Dropdown.Multi == true
+			local W = math.max(InputFrame.AbsoluteSize.X, 300)
+			ExpandPanel.Size = UFO(W, 0)
+			local Target = UFO(
+				InputFrame.AbsolutePosition.X,
+				InputFrame.AbsolutePosition.Y + InputFrame.AbsoluteSize.Y + 6
+			)
+			ExpandPanel.Position = Target - UFO(0, 10)
+			ExpandPanel.Visible = true
+			Tween(ExpandPanel, { Position = Target }, 0.22, ES.Quint)
+			Tween(ExpandBtn, { ImageTransparency = 0; ImageColor3 = Library.Theme.Accent }, 0.15)
+		else
+			ExpandPanel.Visible = false
+			Dropdown.Frame = OptionList
+			if not OptionList.Visible then
+				ReleasePopup(Dropdown)
+			end
+			Tween(ExpandBtn, { ImageTransparency = 0.35; ImageColor3 = RGB(255, 255, 255) }, 0.15)
+		end
+	end
 
 	Dropdown.Close = function()
 		Dropdown.Open(false)
+		Dropdown.OpenExpand(false)
 	end
 
 	Dropdown.Open = function(State: boolean?)
@@ -1420,6 +1673,8 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		end
 
 		if State then
+			Dropdown.OpenExpand(false)
+			Dropdown.Frame = OptionList
 			ClaimPopup(Dropdown)
 
 			OptionList.Size = UFO(InputFrame.AbsoluteSize.X, 0)
@@ -1434,11 +1689,42 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 			Tween(OptionList, { Position = Target }, 0.22, ES.Quint)
 		else
 			OptionList.Visible = false
-			ReleasePopup(Dropdown)
+			if not ExpandPanel.Visible then
+				ReleasePopup(Dropdown)
+			end
 		end
 
 		Tween(Icon, { Rotation = State and 180 or 0 }, 0.18)
 	end
+
+	SelectAllBtn.Activated:Connect(function()
+		if not Dropdown.Multi then return end
+		local All = {}
+		for _, Option in Dropdown.Options do
+			TIS(All, Option)
+		end
+		Dropdown.Set(All)
+	end)
+	DeselectAllBtn.Activated:Connect(function()
+		if not Dropdown.Multi then return end
+		Dropdown.Set({})
+	end)
+	ExpandClose.Activated:Connect(function()
+		Dropdown.OpenExpand(false)
+	end)
+	ExpandBtn.Activated:Connect(function()
+		Dropdown.OpenExpand(not ExpandPanel.Visible)
+	end)
+	ExpandBtn.MouseEnter:Connect(function()
+		if not ExpandPanel.Visible then
+			Tween(ExpandBtn, { ImageTransparency = 0.1 }, 0.1)
+		end
+	end)
+	ExpandBtn.MouseLeave:Connect(function()
+		if not ExpandPanel.Visible then
+			Tween(ExpandBtn, { ImageTransparency = 0.35 }, 0.1)
+		end
+	end)
 
 	local LastToggle = 0
 
@@ -1448,12 +1734,23 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		end
 		LastToggle = os.clock()
 
+		if ExpandPanel.Visible then
+			Dropdown.OpenExpand(false)
+			return
+		end
 		Dropdown.Open(not OptionList.Visible)
 	end
 
 	for _, Object in { ButtonFrame, InputFrame } do
 		Object.InputBegan:Connect(function(Input)
 			if Input.UserInputType ~= UIT.MouseButton1 and Input.UserInputType ~= UIT.Touch then
+				return
+			end
+			-- ignore clicks on expand button (it has its own handler)
+			local Pos = Input.Position
+			local A = ExpandBtn.AbsolutePosition
+			local S = ExpandBtn.AbsoluteSize
+			if Pos.X >= A.X and Pos.X <= A.X + S.X and Pos.Y >= A.Y and Pos.Y <= A.Y + S.Y then
 				return
 			end
 			Activate()
