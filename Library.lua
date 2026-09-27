@@ -1,3 +1,5 @@
+
+
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
 local BSP = Enum.BorderStrokePosition
@@ -59,6 +61,9 @@ local Library = {
 
 	Searchable = {};
 	Sections = {};
+
+	Connections = {};
+	Windows = {};
 }
 
 Library.__index = Library
@@ -66,6 +71,31 @@ Library.Elements.__index = Library.Elements
 Library.SubElements.__index = Library.SubElements
 
 local PopupZ = 20
+
+-- Track connections for clean Unload (Phase 1)
+Library.Track = function(conn: RBXScriptConnection?): RBXScriptConnection?
+	if conn then
+		TIS(Library.Connections, conn)
+	end
+	return conn
+end
+
+Library.Connect = function(signal: RBXScriptSignal, fn: (...any) -> ()): RBXScriptConnection
+	local conn = signal:Connect(fn)
+	TIS(Library.Connections, conn)
+	return conn
+end
+
+Library.DisconnectAll = function()
+	for _, conn in Library.Connections do
+		pcall(function()
+			if conn and conn.Connected then
+				conn:Disconnect()
+			end
+		end)
+	end
+	table.clear(Library.Connections)
+end
 
 cloneref = cloneref or function(...) return ... end
 gethui = gethui or function(...) return cloneref(game:GetService("CoreGui")) end
@@ -491,7 +521,7 @@ local function ReleasePopup(Element: {})
 	end
 end
 
-UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+Library.Track(UserInputService.InputBegan:Connect(function(Input, GameProcessed)
 	if not Library.OpenPopup then
 		return
 	end
@@ -540,7 +570,7 @@ UserInputService.InputBegan:Connect(function(Input, GameProcessed)
 	elseif Popup.Open then
 		Popup.Open(false)
 	end
-end)
+end))
 
 local SectionDrag = {
 	Active = false,
@@ -859,14 +889,14 @@ local function BeginSectionDrag(Section: any, Input: InputObject)
 	UpdateSectionDrag(V2(Input.Position.X, Input.Position.Y))
 end
 
-UserInputService.InputEnded:Connect(function(Input)
+Library.Track(UserInputService.InputEnded:Connect(function(Input)
 	if Input.UserInputType ~= UIT.MouseButton1 and Input.UserInputType ~= UIT.Touch then
 		return
 	end
 	if SectionDrag.Active then
 		StopSectionDrag(true)
 	end
-end)
+end))
 
 local function SectionBuilder(Container: Frame)
 	return function(self: Library, propertyTable: {})
@@ -1143,7 +1173,8 @@ Library.Elements.Slider = function(self: Library, propertyTable: {})
 	local Decimals = MM(#(tostring(Slider.Increment):match("%.(%d+)") or ""), 4)
 
 	local SliderFrame = Add("Frame", { Parent = self.Content; Name = "SliderFrame"; AutomaticSize = AS.Y; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(1, 0); }) :: Frame
-	local Button = Add("TextButton", { Parent = SliderFrame; Name = "Button"; AutoButtonColor = false; BackgroundColor3 = RGB(20, 20, 21); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxasset://fonts/families/SourceSansPro.json", FW.Regular, FS.Normal); Position = UFO(0, 18); Size = UD2(1, 0, 0, 12); Text = ""; TextColor3 = RGB(0, 0, 0); TextSize = 14; }) :: TextButton
+	local Button = Add("TextButton", { Parent = SliderFrame; Name = "Button"; AutoButtonColor = false; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxasset://fonts/families/SourceSansPro.json", FW.Regular, FS.Normal); Position = UFO(0, 18); Size = UD2(1, 0, 0, 12); Text = ""; TextColor3 = RGB(0, 0, 0); TextSize = 14; }) :: TextButton
+	Library.ThemeLink(Button, "BackgroundColor3", "SurfaceAlt")
 	local Overlay = Add("Frame", { Parent = Button; Name = "Overlay"; BackgroundColor3 = RGB(255, 255, 255); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UD2(0, 0, 1, 0); }) :: Frame
 	local Circle = Add("Frame", { Parent = Button; Name = "Circle"; AnchorPoint = V2(1, 0.5); BackgroundColor3 = RGB(0, 0, 0); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UD2(1, -3, 0.5, 0); Size = UFO(8, 8); }) :: Frame
 	Add("TextLabel", { Parent = SliderFrame; Name = "Title"; AutomaticSize = AS.XY; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Size = UFO(0, 9); Text = Slider.Name; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.2; })
@@ -1194,15 +1225,18 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		Callback = function() end,
 	}, propertyTable or {})
 
-	local OptionList = Add("TextButton", { Parent = Library._Instance; Name = "Options"; AutoButtonColor = false; AutomaticSize = AS.Y; BackgroundColor3 = RGB(15, 14, 15); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFS(0.3761225640773773, 0.42204996943473816); Size = UFO(253, 0); Text = ""; Visible = false; ZIndex = PopupZ; }) :: TextButton
+	local OptionList = Add("TextButton", { Parent = Library._Instance; Name = "Options"; AutoButtonColor = false; AutomaticSize = AS.Y; BackgroundColor3 = Library.Theme.Surface; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFS(0.3761225640773773, 0.42204996943473816); Size = UFO(253, 0); Text = ""; Visible = false; ZIndex = PopupZ; }) :: TextButton
+	Library.ThemeLink(OptionList, "BackgroundColor3", "Surface")
 	Add("UICorner", { Parent = OptionList; CornerRadius = UD(0, 5); })
-	Add("UIStroke", { Parent = OptionList; ApplyStrokeMode = ASM.Border; Color = RGB(36, 37, 37); })
+	local OptionStroke = Add("UIStroke", { Parent = OptionList; ApplyStrokeMode = ASM.Border; Color = Library.Theme.Border; })
+	Library.ThemeLink(OptionStroke, "Color", "Border")
 	Add("UIPadding", { Parent = OptionList; })
 	Add("UIShadow", { Parent = OptionList; BlurRadius = UD(0, 20); Spread = UFO(5, 5); Transparency = 0.65; })
 	Add("UIListLayout", { Parent = OptionList; SortOrder = SO.LayoutOrder; })
 
 	local ButtonFrame = Add("Frame", { Parent = self.Content; Name = "ButtonFrame"; Active = true; AutomaticSize = AS.Y; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(1, 0); }) :: Frame
-	local InputFrame = Add("Frame", { Parent = ButtonFrame; Name = "InputFrame"; Active = true; BackgroundColor3 = RGB(20, 20, 21); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(0, 18); Selectable = true; Size = UD2(1, 0, 0, 22); }) :: Frame
+	local InputFrame = Add("Frame", { Parent = ButtonFrame; Name = "InputFrame"; Active = true; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(0, 18); Selectable = true; Size = UD2(1, 0, 0, 22); }) :: Frame
+	Library.ThemeLink(InputFrame, "BackgroundColor3", "SurfaceAlt")
 	Add("TextLabel", { Parent = ButtonFrame; Name = "Title"; AutomaticSize = AS.XY; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Size = UFO(0, 9); Text = Dropdown.Name; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.2; })
 	Add("UICorner", { Parent = InputFrame; CornerRadius = UD(0, 5); })
 	Add("UIPadding", { Parent = InputFrame; PaddingLeft = UD(0, 10); PaddingRight = UD(0, 10); })
@@ -1456,7 +1490,8 @@ Library.Elements.Input = function(self: Library, propertyTable: {})
 	}, propertyTable or {})
 
 	local TextBox = Add("Frame", { Parent = self.Content; Name = "TextBox"; AutomaticSize = AS.Y; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(1, 0); }) :: Frame
-	local InputFrame = Add("Frame", { Parent = TextBox; Name = "InputFrame"; Active = true; BackgroundColor3 = RGB(20, 20, 21); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(0, 18); Selectable = true; Size = UD2(1, 0, 0, 22); }) :: Frame
+	local InputFrame = Add("Frame", { Parent = TextBox; Name = "InputFrame"; Active = true; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(0, 18); Selectable = true; Size = UD2(1, 0, 0, 22); }) :: Frame
+	Library.ThemeLink(InputFrame, "BackgroundColor3", "SurfaceAlt")
 	Add("TextLabel", { Parent = TextBox; Name = "Title"; AutomaticSize = AS.XY; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Size = UFO(0, 9); Text = Input.Name; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.2; })
 	local Box = Add("TextBox", { Parent = InputFrame; Name = "Input"; BackgroundColor3 = RGB(20, 20, 21); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; ClearTextOnFocus = false; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); PlaceholderColor3 = RGB(255, 255, 255); PlaceholderText = Input.Placeholder; Size = UD2(1, -24, 1, 0); Text = Input.Value; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.2; TextTruncate = ETT.SplitWord; TextXAlignment = TXA.Left; }) :: TextBox
 	Add("ImageLabel", { Parent = InputFrame; Name = "Icon"; AnchorPoint = V2(1, 0.5); BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Image = "rbxassetid://96386750273341"; ImageTransparency = 0.2; Position = UFS(1, 0.5); ResampleMode = Enum.ResamplerMode.Pixelated; Size = UFO(14, 14); })
@@ -1650,7 +1685,8 @@ Library.SubElements.Toggle = function(self: Library, propertyTable: {})
 		Callback = function() end
 	}, propertyTable or {})
 
-	local Button = Add("TextButton", { Parent = self.LeftContent; Name = "Toggle"; AutoButtonColor = false; BackgroundColor3 = RGB(20, 20, 21); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxasset://fonts/families/SourceSansPro.json", FW.Regular, FS.Normal); Size = UFO(28, 14); Text = ""; TextColor3 = RGB(0, 0, 0); TextSize = 14; }) :: TextButton
+	local Button = Add("TextButton", { Parent = self.LeftContent; Name = "Toggle"; AutoButtonColor = false; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxasset://fonts/families/SourceSansPro.json", FW.Regular, FS.Normal); Size = UFO(28, 14); Text = ""; TextColor3 = RGB(0, 0, 0); TextSize = 14; }) :: TextButton
+	Library.ThemeLink(Button, "BackgroundColor3", "SurfaceAlt")
 	local Indicator = Add("Frame", { Parent = Button; Name = "Indicator"; AnchorPoint = V2(1, 0.5); BackgroundColor3 = RGB(0, 0, 0); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UD2(1, -3, 0.5, 0); Size = UFO(10, 10); ZIndex = 2; }) :: Frame
 	local Overlay = Add("Frame", { Parent = Button; Name = "Overlay"; BackgroundColor3 = RGB(255, 255, 255); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(1, 1); }) :: Frame
 	Add("UICorner", { Parent = Button; CornerRadius = UD(0, 6); })
@@ -2078,12 +2114,19 @@ Library.Window = function(self: Library, propertyTable: {})
 		Footer = "",
 		Logo = nil,
 		Icon = nil,
+		-- "Icon" (default, compact) | "IconText" (icon + label, wider sidebar)
+		TabStyle = "Icon",
 	}, propertyTable or {})
+
+	local TabStyle = (Window.TabStyle == "IconText" or Window.TabStyle == "Text") and "IconText" or "Icon"
+	Window.TabStyle = TabStyle
+	local SidebarW = TabStyle == "IconText" and 118 or 75
 
 	local Canvas = Add("Frame", { Parent = self._Instance; Name = "Canvas"; BackgroundColor3 = Library.Theme.Background; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFO(658, 461); }) :: Frame
 	Library.ThemeLink(Canvas, "BackgroundColor3", "Background")
-	local Sidebar = Add("Frame", { Parent = Canvas; Name = "Sidebar"; BackgroundColor3 = Library.Theme.Surface; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UD2(0, 75, 1, 0); }) :: Frame
+	local Sidebar = Add("Frame", { Parent = Canvas; Name = "Sidebar"; BackgroundColor3 = Library.Theme.Surface; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UD2(0, SidebarW, 1, 0); }) :: Frame
 	Library.ThemeLink(Sidebar, "BackgroundColor3", "Surface")
+	Window.SidebarWidth = SidebarW
 
 	-- Author logo (only if Logo / Icon provided — no default hashtag)
 	local LogoSrc = Window.Logo or Window.Icon
@@ -2158,10 +2201,17 @@ Library.Window = function(self: Library, propertyTable: {})
 	})
 	Add("UIListLayout", {
 		Parent = PageButtons;
-		Padding = UD(0, 5);
-		HorizontalAlignment = HFA.Center;
+		Padding = UD(0, TabStyle == "IconText" and 4 or 5);
+		HorizontalAlignment = TabStyle == "IconText" and HFA.Left or HFA.Center;
 		SortOrder = SO.LayoutOrder;
 	})
+	if TabStyle == "IconText" then
+		Add("UIPadding", {
+			Parent = PageButtons;
+			PaddingLeft = UD(0, 8);
+			PaddingRight = UD(0, 8);
+		})
+	end
 
 	Window.TabEditMode = false
 	-- Very small lock/reorder toggle
@@ -2233,12 +2283,12 @@ Library.Window = function(self: Library, propertyTable: {})
 		PageButtons.Size = UD2(1, 0, 1, -H - 28)
 	end
 
-	local Header = Add("Frame", { Parent = Canvas; Name = "Header"; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(75, 0); Size = UD2(1, -75, 0, 50); }) :: Frame
+	local Header = Add("Frame", { Parent = Canvas; Name = "Header"; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(SidebarW, 0); Size = UD2(1, -SidebarW, 0, 50); }) :: Frame
 	Library.ThemeLink(Header, "BackgroundColor3", "SurfaceAlt")
 	local SubPages = Add("Frame", { Parent = Header; Name = "SubPages"; AutomaticSize = AS.X; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(0, 1); }) :: Frame
 	local Search = Add("Frame", { Parent = Header; Name = "Search"; LayoutOrder = 1; Active = true; AnchorPoint = V2(1, 0); AutomaticSize = AS.X; BackgroundColor3 = Library.Theme.Background; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFS(1, 0); Selectable = true; Size = UD2(0, 200, 1, 0); }) :: Frame
-	local Pages = Add("Frame", { Parent = Canvas; Name = "Pages"; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(75, 50); Size = UD2(1, -75, 1, -75); }) :: Frame
-	local Footer = Add("Frame", { Parent = Canvas; Name = "Footer"; AnchorPoint = V2(0, 1); BackgroundColor3 = Library.Theme.Surface; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UD2(0, 75, 1, 0); Size = UD2(1, -75, 0, 25); }) :: Frame
+	local Pages = Add("Frame", { Parent = Canvas; Name = "Pages"; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(SidebarW, 50); Size = UD2(1, -SidebarW, 1, -75); }) :: Frame
+	local Footer = Add("Frame", { Parent = Canvas; Name = "Footer"; AnchorPoint = V2(0, 1); BackgroundColor3 = Library.Theme.Surface; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UD2(0, SidebarW, 1, 0); Size = UD2(1, -SidebarW, 0, 25); }) :: Frame
 	Library.ThemeLink(Footer, "BackgroundColor3", "Surface")
 	local SearchBox = Add("TextBox", { Parent = Search; Name = "TextLabel"; Active = false; AutomaticSize = AS.X; ClearTextOnFocus = false; LayoutOrder = 1; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); PlaceholderColor3 = RGB(255, 255, 255); PlaceholderText = "Search function"; Selectable = false; Size = UFS(0, 1); Text = ""; TextColor3 = RGB(255, 255, 255); TextSize = 14; TextTransparency = 0.5; }) :: TextBox
 	Add("UIStroke", { Parent = Canvas; ApplyStrokeMode = ASM.Border; Color = RGB(36, 37, 37); })
@@ -2313,23 +2363,33 @@ Library.Window = function(self: Library, propertyTable: {})
 		local Query = SearchBox.Text:lower()
 		local Matched = {}
 		local FirstOwner = nil
+		local FirstSection = nil
 
 		for _, Entry in Library.Searchable do
-			local Visible = Query == "" or Entry.Text:lower():find(Query, 1, true) ~= nil
-			Entry.Frame.Visible = Visible
+			local Text = tostring(Entry.Text or ""):lower()
+			local Visible = Query == "" or Text:find(Query, 1, true) ~= nil
+			if Entry.Frame then
+				Entry.Frame.Visible = Visible
+			end
 
 			if Visible then
-				Matched[Entry.Section] = true
+				if Entry.Section then
+					Matched[Entry.Section] = true
+				end
 				if Query ~= "" and not FirstOwner and Entry.Section and Entry.Section.PageFrame then
 					FirstOwner = (Library.PageFrames or {})[Entry.Section.PageFrame]
+					FirstSection = Entry.Section
 				end
 			end
 		end
 
 		for _, Section in Library.Sections do
-			Section.Frame.Visible = Query == "" or Matched[Section] == true
+			if Section.Frame then
+				Section.Frame.Visible = Query == "" or Matched[Section] == true
+			end
 		end
 
+		-- Reliably open Page → SubPage chain, then ensure matching section is visible
 		if Query ~= "" and FirstOwner then
 			local Owner = FirstOwner
 			if Owner.ParentPage then
@@ -2342,18 +2402,34 @@ Library.Window = function(self: Library, propertyTable: {})
 			elseif not Owner.IsOpen then
 				Owner.Open()
 			end
+			-- Scroll section into view when possible
+			if FirstSection and FirstSection.Frame and FirstSection.Frame.Parent then
+				local Col = FirstSection.Frame.Parent
+				if Col:IsA("ScrollingFrame") then
+					task.defer(function()
+						if not FirstSection.Frame or not FirstSection.Frame.Parent then return end
+						local Rel = FirstSection.Frame.AbsolutePosition.Y - Col.AbsolutePosition.Y + Col.CanvasPosition.Y
+						Col.CanvasPosition = V2(0, math.max(0, Rel - 12))
+					end)
+				end
+			end
 		end
 	end)
 
 	Window.Pages = {}
 	Window.Page = function(self: Library, propertyTable: {})
 		local Page = Overwrite({
-			Icon = "box"
+			Icon = "box",
+			Name = "", -- used when TabStyle == "IconText"
 		}, propertyTable or {})
 
 		Page.SubPages = {}
 		Page.ActiveSubPage = nil
 		Page.Opened = false
+
+		local IsIconText = Window.TabStyle == "IconText"
+		local TabH = IsIconText and 36 or 45
+		local TabW = IsIconText and (SidebarW - 16) or 45
 
 		local PageButton = Add("TextButton", {
 			Parent = PageButtons;
@@ -2361,19 +2437,19 @@ Library.Window = function(self: Library, propertyTable: {})
 			AutoButtonColor = false;
 			BackgroundTransparency = 1;
 			BorderSizePixel = 0;
-			Size = UFO(45, 45);
+			Size = UFO(TabW, TabH);
 			Text = "";
 			ClipsDescendants = false;
 			LayoutOrder = #Window.Pages;
 		}) :: TextButton
 
-		-- Soft radial selection bloom (centered behind icon)
+		-- Soft radial selection bloom (behind icon)
 		local GlowImage = Add("ImageLabel", {
 			Parent = PageButton;
 			Name = "GlowImage";
-			AnchorPoint = V2(0.5, 0.5);
-			Position = UFS(0.5, 0.5);
-			Size = UFO(52, 52);
+			AnchorPoint = IsIconText and V2(0, 0.5) or V2(0.5, 0.5);
+			Position = IsIconText and UD2(0, 2, 0.5, 0) or UFS(0.5, 0.5);
+			Size = IsIconText and UFO(40, 40) or UFO(52, 52);
 			BackgroundTransparency = 1;
 			Image = "rbxassetid://8992230677";
 			ImageColor3 = Library.Theme.Accent;
@@ -2385,9 +2461,9 @@ Library.Window = function(self: Library, propertyTable: {})
 		local GlowInner = Add("ImageLabel", {
 			Parent = PageButton;
 			Name = "GlowInner";
-			AnchorPoint = V2(0.5, 0.5);
-			Position = UFS(0.5, 0.5);
-			Size = UFO(36, 36);
+			AnchorPoint = IsIconText and V2(0, 0.5) or V2(0.5, 0.5);
+			Position = IsIconText and UD2(0, 8, 0.5, 0) or UFS(0.5, 0.5);
+			Size = IsIconText and UFO(28, 28) or UFO(36, 36);
 			BackgroundTransparency = 1;
 			Image = "rbxassetid://8992230677";
 			ImageColor3 = Library.Theme.Accent;
@@ -2399,27 +2475,56 @@ Library.Window = function(self: Library, propertyTable: {})
 
 		local PageIcon = Add("ImageLabel", {
 			Parent = PageButton;
+			Name = "Icon";
 			BackgroundTransparency = 1;
 			BorderSizePixel = 0;
 			Image = ResolveIcon(Page.Icon);
 			ImageTransparency = 0.45;
 			ImageColor3 = RGB(255, 255, 255);
 			ScaleType = SCL.Fit;
-			Size = UFS(1, 1);
 			ZIndex = 3;
 		}) :: ImageLabel
-		Add("UIPadding", {
-			Parent = PageButton;
-			PaddingBottom = UD(0, 12);
-			PaddingLeft = UD(0, 12);
-			PaddingRight = UD(0, 12);
-			PaddingTop = UD(0, 12);
-		})
+
+		local PageLabel: TextLabel? = nil
+		if IsIconText then
+			PageIcon.AnchorPoint = V2(0, 0.5)
+			PageIcon.Position = UD2(0, 10, 0.5, 0)
+			PageIcon.Size = UFO(16, 16)
+			local LabelText = (Page.Name ~= "" and Page.Name) or tostring(Page.Icon or "Tab")
+			PageLabel = Add("TextLabel", {
+				Parent = PageButton;
+				Name = "Label";
+				BackgroundTransparency = 1;
+				BorderSizePixel = 0;
+				AnchorPoint = V2(0, 0.5);
+				Position = UD2(0, 32, 0.5, 0);
+				Size = UD2(1, -38, 0, 16);
+				FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+				Text = LabelText;
+				TextColor3 = Library.Theme.Text;
+				TextTransparency = 0.45;
+				TextSize = 12;
+				TextXAlignment = TXA.Left;
+				TextTruncate = ETT.AtEnd;
+				ZIndex = 3;
+			}) :: TextLabel
+			Library.ThemeLink(PageLabel, "TextColor3", "Text")
+		else
+			PageIcon.Size = UFS(1, 1)
+			Add("UIPadding", {
+				Parent = PageButton;
+				PaddingBottom = UD(0, 12);
+				PaddingLeft = UD(0, 12);
+				PaddingRight = UD(0, 12);
+				PaddingTop = UD(0, 12);
+			})
+		end
 
 		Page.Button = PageButton
 		Page.GlowImage = GlowImage
 		Page.GlowInner = GlowInner
 		Page.IconLabel = PageIcon
+		Page.Label = PageLabel
 		Page.LayoutOrder = PageButton.LayoutOrder
 
 		PageContent(Page, Pages, Window.Pages, function()
@@ -2427,6 +2532,9 @@ Library.Window = function(self: Library, propertyTable: {})
 			Tween(GlowImage, { ImageTransparency = 0.62 }, 0.22)
 			Tween(GlowInner, { ImageTransparency = 0.78 }, 0.22)
 			Tween(PageIcon, { ImageTransparency = 0, ImageColor3 = Library.Theme.Accent }, 0.2)
+			if PageLabel then
+				Tween(PageLabel, { TextTransparency = 0, TextColor3 = Library.Theme.Accent }, 0.2)
+			end
 
 			for _, SubPage in Page.SubPages do
 				SubPage.Button.Visible = true
@@ -2441,6 +2549,9 @@ Library.Window = function(self: Library, propertyTable: {})
 			Tween(GlowImage, { ImageTransparency = 1 }, 0.16)
 			Tween(GlowInner, { ImageTransparency = 1 }, 0.16)
 			Tween(PageIcon, { ImageTransparency = 0.45, ImageColor3 = RGB(255, 255, 255) }, 0.16)
+			if PageLabel then
+				Tween(PageLabel, { TextTransparency = 0.45, TextColor3 = Library.Theme.Text }, 0.16)
+			end
 
 			for _, SubPage in Page.SubPages do
 				SubPage.Button.Visible = false
@@ -2505,7 +2616,7 @@ Library.Window = function(self: Library, propertyTable: {})
 				Placeholder = Add("Frame", {
 					Parent = PageButtons;
 					Name = "TabPlaceholder";
-					Size = UFO(45, 45);
+					Size = UFO(TabW, TabH);
 					BackgroundTransparency = 1;
 					BorderSizePixel = 0;
 					LayoutOrder = OriginOrder;
@@ -2521,32 +2632,63 @@ Library.Window = function(self: Library, propertyTable: {})
 				Ghost = Add("Frame", {
 					Parent = Library._Instance;
 					Name = "TabGhost";
-					Size = UFO(45, 45);
+					Size = UFO(TabW, TabH);
 					BackgroundTransparency = 1;
 					ZIndex = 120;
 				})
-				Add("ImageLabel", {
-					Parent = Ghost;
-					BackgroundTransparency = 1;
-					Size = UFS(1, 1);
-					Image = PageIcon.Image;
-					ImageColor3 = Library.Theme.Accent;
-					ImageTransparency = 0.2;
-					ScaleType = SCL.Fit;
-				})
-				Add("UIPadding", {
-					Parent = Ghost;
-					PaddingBottom = UD(0, 12);
-					PaddingLeft = UD(0, 12);
-					PaddingRight = UD(0, 12);
-					PaddingTop = UD(0, 12);
-				})
+				if IsIconText then
+					Add("ImageLabel", {
+						Parent = Ghost;
+						BackgroundTransparency = 1;
+						AnchorPoint = V2(0, 0.5);
+						Position = UD2(0, 10, 0.5, 0);
+						Size = UFO(16, 16);
+						Image = PageIcon.Image;
+						ImageColor3 = Library.Theme.Accent;
+						ImageTransparency = 0.2;
+						ScaleType = SCL.Fit;
+					})
+					if PageLabel then
+						Add("TextLabel", {
+							Parent = Ghost;
+							BackgroundTransparency = 1;
+							AnchorPoint = V2(0, 0.5);
+							Position = UD2(0, 32, 0.5, 0);
+							Size = UD2(1, -38, 0, 16);
+							FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+							Text = PageLabel.Text;
+							TextColor3 = Library.Theme.Accent;
+							TextTransparency = 0.2;
+							TextSize = 12;
+							TextXAlignment = TXA.Left;
+						})
+					end
+				else
+					Add("ImageLabel", {
+						Parent = Ghost;
+						BackgroundTransparency = 1;
+						Size = UFS(1, 1);
+						Image = PageIcon.Image;
+						ImageColor3 = Library.Theme.Accent;
+						ImageTransparency = 0.2;
+						ScaleType = SCL.Fit;
+					})
+					Add("UIPadding", {
+						Parent = Ghost;
+						PaddingBottom = UD(0, 12);
+						PaddingLeft = UD(0, 12);
+						PaddingRight = UD(0, 12);
+						PaddingTop = UD(0, 12);
+					})
+				end
 
 				local function ClampGhostY(MouseY)
 					local Top = PageButtons.AbsolutePosition.Y
-					local Bot = Top + PageButtons.AbsoluteSize.Y - 45
-					local GX = PageButtons.AbsolutePosition.X + (PageButtons.AbsoluteSize.X - 45) * 0.5
-					local GY = MC(MouseY - 22, Top, math.max(Top, Bot))
+					local Bot = Top + PageButtons.AbsoluteSize.Y - TabH
+					local GX = IsIconText
+						and (PageButtons.AbsolutePosition.X + 8)
+						or (PageButtons.AbsolutePosition.X + (PageButtons.AbsoluteSize.X - TabW) * 0.5)
+					local GY = MC(MouseY - TabH * 0.5, Top, math.max(Top, Bot))
 					return GX, GY
 				end
 
@@ -2794,11 +2936,26 @@ Library.ApplyTheme = function()
 			if Page.IconLabel then
 				if Page.Opened then
 					Page.IconLabel.ImageTransparency = 0
-					Page.IconLabel.ImageColor3 = RGB(255, 255, 255)
+					Page.IconLabel.ImageColor3 = T.Accent
 				else
-					Page.IconLabel.ImageTransparency = 0.5
+					Page.IconLabel.ImageTransparency = 0.45
 					Page.IconLabel.ImageColor3 = RGB(255, 255, 255)
 				end
+			end
+			if Page.Label then
+				if Page.Opened then
+					Page.Label.TextTransparency = 0
+					Page.Label.TextColor3 = T.Accent
+				else
+					Page.Label.TextTransparency = 0.45
+					Page.Label.TextColor3 = T.Text
+				end
+			end
+			if Page.GlowImage then
+				Page.GlowImage.ImageColor3 = T.Accent
+			end
+			if Page.GlowInner then
+				Page.GlowInner.ImageColor3 = T.Accent
 			end
 			for _, Sub in (Page.SubPages or {}) do
 				local Btn = Sub.Button
@@ -4042,19 +4199,51 @@ end
 
 Library.Unload = function()
 	Library.ToggleMenu(false)
-	if Library.Watermark.Frame then Library.Watermark.Frame.Visible = false end
-	if Library.KeybindList.Frame then Library.KeybindList.Frame.Visible = false end
-	if Library._NotifyHost then Library._NotifyHost.Visible = false end
+	-- Stop tracked signals (drags, watermark stats, menu key, etc.)
+	if Library.DisconnectAll then
+		Library.DisconnectAll()
+	end
+	if Library.Watermark and Library.Watermark._StatsConn then
+		pcall(function() Library.Watermark._StatsConn:Disconnect() end)
+		Library.Watermark._StatsConn = nil
+	end
+	if Library.Watermark and Library.Watermark.Frame then
+		Library.Watermark.Frame.Visible = false
+		pcall(function() Library.Watermark.Frame:Destroy() end)
+		Library.Watermark.Frame = nil
+	end
+	if Library.KeybindList and Library.KeybindList.Frame then
+		Library.KeybindList.Frame.Visible = false
+		pcall(function() Library.KeybindList.Frame:Destroy() end)
+		Library.KeybindList.Frame = nil
+	end
+	if Library._NotifyHost then
+		Library._NotifyHost.Visible = false
+		pcall(function() Library._NotifyHost:Destroy() end)
+		Library._NotifyHost = nil
+	end
+	if Library._Overlay then
+		pcall(function() Library._Overlay:Destroy() end)
+		Library._Overlay = nil
+	end
 	for _, Win in Library.Windows do
 		if Win.Canvas then
-			Win.Canvas:Destroy()
+			pcall(function() Win.Canvas:Destroy() end)
 		end
 	end
 	table.clear(Library.Windows)
+	table.clear(Library.Searchable)
+	table.clear(Library.Sections)
+	table.clear(Library.Flags)
+	table.clear(Library.ThemeLinks)
 	if Library._Instance then
-		Library._Instance:Destroy()
+		pcall(function() Library._Instance:Destroy() end)
+		Library._Instance = nil
 	end
-	Library.Notify({ Title = "Noctro"; Text = "Unloaded"; Duration = 2 })
+	-- Brief toast may fail if overlay was destroyed — ignore
+	pcall(function()
+		Library.Notify({ Title = "Noctro"; Text = "Unloaded"; Duration = 2 })
+	end)
 end
 
 Library.ToggleMenu = function(State: boolean?)
@@ -4075,14 +4264,14 @@ Library.ToggleMenu = function(State: boolean?)
 	end
 end
 
-UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+Library.Track(UserInputService.InputBegan:Connect(function(Input, GameProcessed)
 	if GameProcessed then
 		return
 	end
 	if Library.MenuKey and Input.KeyCode == Library.MenuKey then
 		Library.ToggleMenu()
 	end
-end)
+end))
 
 Library.BuildConfigPage = function(self: Library, Window: any)
 	local Page = Window:Page({ Icon = "save" })
