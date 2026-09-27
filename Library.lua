@@ -1,7 +1,7 @@
---@ version: 1.1.2
+--@ version: 1.1.3
 --@ library: Noctro
 --@ updated: 2026-09-27
---@ changes: Dropdown expand is a centered modal dialog (dim backdrop + card)
+--@ changes: Library:UiButton — floating show/hide menu button
 
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
@@ -4596,6 +4596,205 @@ Library.ToggleMenu = function(State: boolean?)
 	if Library.OpenPopup and Library.OpenPopup.Close then
 		Library.OpenPopup.Close()
 	end
+	-- Keep floating UiButton visual in sync
+	if Library._UiButton and Library._UiButton.Sync then
+		pcall(Library._UiButton.Sync)
+	end
+end
+
+--[[
+	Floating show/hide button (always visible on overlay).
+
+	Library:UiButton({
+		Icon = "menu",          -- Lucide name / asset id / rbxassetid
+		Text = nil,             -- optional label next to icon
+		Size = 44,              -- diameter when icon-only; width grows with Text
+		Position = nil,         -- UDim2; default bottom-right
+		Draggable = true,
+		Tooltip = "Toggle menu",
+		Callback = function(open) end, -- after toggle; open = new MenuOpen
+	})
+]]
+Library.UiButton = function(self: Library, propertyTable: {})
+	local Props = Overwrite({
+		Icon = "menu";
+		Text = nil;
+		Size = 44;
+		Position = nil;
+		Draggable = true;
+		Tooltip = "Toggle menu";
+		Callback = function() end;
+	}, propertyTable or {})
+
+	-- Replace previous instance if any
+	if Library._UiButton and Library._UiButton.Destroy then
+		pcall(Library._UiButton.Destroy)
+	end
+
+	local Gui = EnsureOverlayGui()
+	local Diameter = typeof(Props.Size) == "number" and Props.Size or 44
+	local HasText = type(Props.Text) == "string" and Props.Text ~= ""
+	local Width = HasText and math.max(Diameter + 48, 100) or Diameter
+
+	local DefaultPos = Props.Position
+	if not DefaultPos then
+		local Cam = workspace.CurrentCamera
+		local VH = Cam and Cam.ViewportSize.Y or 800
+		local VW = Cam and Cam.ViewportSize.X or 1280
+		DefaultPos = UFO(math.max(12, VW - Width - 18), math.max(12, VH - Diameter - 24))
+	end
+
+	local Frame = Add("Frame", {
+		Parent = Gui;
+		Name = "UiButton";
+		Size = UFO(Width, Diameter);
+		Position = DefaultPos;
+		BackgroundColor3 = Library.Theme.Surface;
+		BorderSizePixel = 0;
+		ZIndex = 250;
+		Active = true;
+	})
+	Library.ThemeLink(Frame, "BackgroundColor3", "Surface")
+	Add("UICorner", { Parent = Frame; CornerRadius = UD(1, 0); })
+	local Stroke = Add("UIStroke", { Parent = Frame; ApplyStrokeMode = ASM.Border; Color = Library.Theme.Border; Thickness = 1; })
+	Library.ThemeLink(Stroke, "Color", "Border")
+	Add("UIShadow", { Parent = Frame; BlurRadius = UD(0, 16); Spread = UFO(4, 4); Transparency = 0.65; })
+
+	local Hit = Add("TextButton", {
+		Parent = Frame;
+		Name = "Hit";
+		Size = UFS(1, 1);
+		BackgroundTransparency = 1;
+		Text = "";
+		AutoButtonColor = false;
+		ZIndex = 252;
+	})
+
+	local Accent = Add("Frame", {
+		Parent = Frame;
+		Name = "Accent";
+		Size = UFS(1, 1);
+		BackgroundColor3 = RGB(255, 255, 255);
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		ZIndex = 251;
+	})
+	Add("UICorner", { Parent = Accent; CornerRadius = UD(1, 0); })
+	local AccentGrad = Add("UIGradient", {
+		Parent = Accent;
+		Color = CS{ CSK(0, Library.Theme.AccentDark), CSK(1, Library.Theme.Accent) };
+		Rotation = -90;
+		Enabled = false;
+	})
+	Library.ThemeLink(AccentGrad, "Gradient", "AccentDark", "Accent")
+
+	local IconImg = Add("ImageLabel", {
+		Parent = Frame;
+		Name = "Icon";
+		BackgroundTransparency = 1;
+		AnchorPoint = HasText and V2(0, 0.5) or V2(0.5, 0.5);
+		Position = HasText and UD2(0, 12, 0.5, 0) or UFS(0.5, 0.5);
+		Size = UFO(math.floor(Diameter * 0.42), math.floor(Diameter * 0.42));
+		Image = ResolveIcon(Props.Icon);
+		ImageColor3 = Library.Theme.Text;
+		ImageTransparency = 0.1;
+		ScaleType = SCL.Fit;
+		ZIndex = 253;
+	})
+	Library.ThemeLink(IconImg, "ImageColor3", "Text")
+
+	local Label: TextLabel? = nil
+	if HasText then
+		Label = Add("TextLabel", {
+			Parent = Frame;
+			BackgroundTransparency = 1;
+			AnchorPoint = V2(0, 0.5);
+			Position = UD2(0, 12 + math.floor(Diameter * 0.42) + 8, 0.5, 0);
+			Size = UD2(1, -(20 + math.floor(Diameter * 0.42)), 0, 18);
+			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+			Text = Props.Text;
+			TextColor3 = Library.Theme.Text;
+			TextSize = 13;
+			TextXAlignment = TXA.Left;
+			TextTruncate = ETT.AtEnd;
+			ZIndex = 253;
+		})
+		Library.ThemeLink(Label, "TextColor3", "Text")
+	end
+
+	local function Sync()
+		local Open = Library.MenuOpen == true
+		AccentGrad.Enabled = Open
+		if Open then
+			Tween(Accent, { BackgroundTransparency = 0 }, 0.15)
+			Tween(IconImg, { ImageColor3 = RGB(12, 12, 14); ImageTransparency = 0 }, 0.15)
+			if Label then
+				Tween(Label, { TextColor3 = RGB(12, 12, 14) }, 0.15)
+			end
+			Tween(Frame, { BackgroundColor3 = RGB(255, 255, 255) }, 0.15)
+		else
+			Tween(Accent, { BackgroundTransparency = 1 }, 0.15)
+			Tween(IconImg, { ImageColor3 = Library.Theme.Text; ImageTransparency = 0.1 }, 0.15)
+			if Label then
+				Tween(Label, { TextColor3 = Library.Theme.Text }, 0.15)
+			end
+			Tween(Frame, { BackgroundColor3 = Library.Theme.Surface }, 0.15)
+		end
+	end
+
+	Hit.MouseEnter:Connect(function()
+		if Library.MenuOpen then return end
+		Tween(Frame, { BackgroundColor3 = Library.Theme.SurfaceAlt }, 0.12)
+		Tween(IconImg, { ImageTransparency = 0 }, 0.12)
+	end)
+	Hit.MouseLeave:Connect(function()
+		if Library.MenuOpen then return end
+		Tween(Frame, { BackgroundColor3 = Library.Theme.Surface }, 0.12)
+		Tween(IconImg, { ImageTransparency = 0.1 }, 0.12)
+	end)
+
+	Hit.Activated:Connect(function()
+		Library.ToggleMenu()
+		if Props.Callback then
+			pcall(Props.Callback, Library.MenuOpen)
+		end
+	end)
+
+	if Props.Draggable ~= false then
+		BindDrag(Frame, Hit, true)
+	end
+
+	local Api = {
+		Frame = Frame;
+		SetVisible = function(Vis: boolean)
+			Frame.Visible = Vis == true
+		end;
+		SetIcon = function(Icon: any)
+			IconImg.Image = ResolveIcon(Icon)
+		end;
+		SetText = function(Text: string?)
+			if Label then
+				Label.Text = Text or ""
+			end
+		end;
+		Sync = Sync;
+		Destroy = function()
+			pcall(function() Frame:Destroy() end)
+			if Library._UiButton == Api then
+				Library._UiButton = nil
+			end
+		end;
+	}
+
+	Library._UiButton = Api
+	Sync()
+	task.defer(function()
+		if Frame and Frame.Parent then
+			Frame.Position = ClampToScreen(Frame, Frame.Position)
+		end
+	end)
+
+	return Api
 end
 
 Library.Track(UserInputService.InputBegan:Connect(function(Input, GameProcessed)
