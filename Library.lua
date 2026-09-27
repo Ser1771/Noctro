@@ -1,3 +1,8 @@
+--@ version: 1.1.2
+--@ library: Noctro
+--@ updated: 2026-09-27
+--@ changes: Dropdown expand is a centered modal dialog (dim backdrop + card)
+
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
 local BSP = Enum.BorderStrokePosition
@@ -1232,31 +1237,46 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	Add("UIShadow", { Parent = OptionList; BlurRadius = UD(0, 20); Spread = UFO(5, 5); Transparency = 0.65; })
 	Add("UIListLayout", { Parent = OptionList; SortOrder = SO.LayoutOrder; })
 
-	-- Expanded multi-select panel (maximize): horizontal chips + Select All / Deselect All
-	local ExpandPanel = Add("Frame", {
+	-- Expanded dropdown = centered modal dialog (dim backdrop + card)
+	local ExpandOverlay = Add("TextButton", {
 		Parent = Library._Instance;
-		Name = "DropdownExpand";
+		Name = "DropdownExpandOverlay";
+		AutoButtonColor = false;
+		BackgroundColor3 = RGB(0, 0, 0);
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Size = UFS(1, 1);
+		Text = "";
+		Visible = false;
+		ZIndex = PopupZ + 8;
+		Active = true;
+	}) :: TextButton
+
+	local ExpandPanel = Add("Frame", {
+		Parent = ExpandOverlay;
+		Name = "Dialog";
+		AnchorPoint = V2(0.5, 0.5);
+		Position = UFS(0.5, 0.5);
 		BackgroundColor3 = Library.Theme.Surface;
 		BorderSizePixel = 0;
-		Size = UFO(340, 0);
+		Size = UFO(420, 0);
 		AutomaticSize = AS.Y;
-		Visible = false;
-		ZIndex = PopupZ + 1;
+		ZIndex = PopupZ + 9;
 		Active = true;
 	}) :: Frame
 	Library.ThemeLink(ExpandPanel, "BackgroundColor3", "Surface")
-	Add("UICorner", { Parent = ExpandPanel; CornerRadius = UD(0, 8); })
+	Add("UICorner", { Parent = ExpandPanel; CornerRadius = UD(0, 10); })
 	local ExpandStroke = Add("UIStroke", { Parent = ExpandPanel; ApplyStrokeMode = ASM.Border; Color = Library.Theme.Border; })
 	Library.ThemeLink(ExpandStroke, "Color", "Border")
-	Add("UIShadow", { Parent = ExpandPanel; BlurRadius = UD(0, 22); Spread = UFO(5, 5); Transparency = 0.6; })
+	Add("UIShadow", { Parent = ExpandPanel; BlurRadius = UD(0, 28); Spread = UFO(6, 6); Transparency = 0.55; })
 	Add("UIPadding", {
 		Parent = ExpandPanel;
-		PaddingTop = UD(0, 10);
-		PaddingBottom = UD(0, 12);
-		PaddingLeft = UD(0, 12);
-		PaddingRight = UD(0, 12);
+		PaddingTop = UD(0, 14);
+		PaddingBottom = UD(0, 14);
+		PaddingLeft = UD(0, 16);
+		PaddingRight = UD(0, 16);
 	})
-	Add("UIListLayout", { Parent = ExpandPanel; Padding = UD(0, 10); SortOrder = SO.LayoutOrder; })
+	Add("UIListLayout", { Parent = ExpandPanel; Padding = UD(0, 12); SortOrder = SO.LayoutOrder; })
 
 	local ExpandHeader = Add("Frame", {
 		Parent = ExpandPanel;
@@ -1264,38 +1284,42 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		BackgroundTransparency = 1;
 		Size = UD2(1, 0, 0, 28);
 		LayoutOrder = 0;
+		ZIndex = PopupZ + 10;
 	})
 	Add("TextLabel", {
 		Parent = ExpandHeader;
 		BackgroundTransparency = 1;
-		Size = UD2(1, -70, 1, 0);
+		Size = UD2(1, -36, 1, 0);
 		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
 		Text = Dropdown.Name ~= "" and Dropdown.Name or "Options";
 		TextColor3 = Library.Theme.Text;
-		TextSize = 13;
+		TextSize = 15;
 		TextXAlignment = TXA.Left;
 		TextTruncate = ETT.AtEnd;
+		ZIndex = PopupZ + 10;
 	})
 	local ExpandClose = Add("TextButton", {
 		Parent = ExpandHeader;
 		AnchorPoint = V2(1, 0.5);
 		Position = UD2(1, 0, 0.5, 0);
-		Size = UFO(22, 22);
+		Size = UFO(28, 28);
 		BackgroundTransparency = 1;
 		Text = "×";
 		TextColor3 = RGB(160, 164, 180);
-		TextSize = 16;
+		TextSize = 18;
 		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
 		AutoButtonColor = false;
+		ZIndex = PopupZ + 11;
 	})
 
 	local ExpandActions = Add("Frame", {
 		Parent = ExpandPanel;
 		Name = "Actions";
 		BackgroundTransparency = 1;
-		Size = UD2(1, 0, 0, 28);
+		Size = UD2(1, 0, 0, 30);
 		LayoutOrder = 1;
 		Visible = Dropdown.Multi == true;
+		ZIndex = PopupZ + 10;
 	})
 	Add("UIListLayout", {
 		Parent = ExpandActions;
@@ -1309,23 +1333,24 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 			AutoButtonColor = false;
 			BackgroundColor3 = Library.Theme.SurfaceAlt;
 			BorderSizePixel = 0;
-			Size = UFO(0, 28);
+			Size = UFO(0, 30);
 			AutomaticSize = AS.X;
 			Text = Text;
 			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
 			TextSize = 12;
 			TextColor3 = Library.Theme.Text;
-			TextTransparency = 0.15;
+			TextTransparency = 0.1;
 			LayoutOrder = Order;
+			ZIndex = PopupZ + 10;
 		})
 		Add("UICorner", { Parent = B; CornerRadius = UD(0, 6); })
-		Add("UIPadding", { Parent = B; PaddingLeft = UD(0, 12); PaddingRight = UD(0, 12); })
+		Add("UIPadding", { Parent = B; PaddingLeft = UD(0, 14); PaddingRight = UD(0, 14); })
 		Library.ThemeLink(B, "BackgroundColor3", "SurfaceAlt")
 		B.MouseEnter:Connect(function()
 			Tween(B, { BackgroundColor3 = Library.Theme.AccentDark; TextTransparency = 0 }, 0.1)
 		end)
 		B.MouseLeave:Connect(function()
-			Tween(B, { BackgroundColor3 = Library.Theme.SurfaceAlt; TextTransparency = 0.15 }, 0.1)
+			Tween(B, { BackgroundColor3 = Library.Theme.SurfaceAlt; TextTransparency = 0.1 }, 0.1)
 		end)
 		return B
 	end
@@ -1337,14 +1362,15 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		Name = "Chips";
 		BackgroundTransparency = 1;
 		BorderSizePixel = 0;
-		Size = UD2(1, 0, 0, 72);
+		Size = UD2(1, 0, 0, 120);
 		CanvasSize = UD2(0, 0, 0, 0);
-		AutomaticCanvasSize = AS.XY;
+		AutomaticCanvasSize = AS.Y;
 		ScrollBarThickness = 3;
 		ScrollBarImageColor3 = Library.Theme.Accent;
-		ScrollingDirection = SBD.XY;
+		ScrollingDirection = SBD.Y;
 		LayoutOrder = 2;
 		ClipsDescendants = true;
+		ZIndex = PopupZ + 10;
 	})
 	Library.ThemeLink(ChipScroll, "ScrollBarImageColor3", "Accent")
 	local ChipHost = Add("Frame", {
@@ -1352,13 +1378,14 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		Name = "Host";
 		BackgroundTransparency = 1;
 		Size = UD2(1, 0, 0, 0);
-		AutomaticSize = AS.XY;
+		AutomaticSize = AS.Y;
+		ZIndex = PopupZ + 10;
 	})
-	-- Horizontal chip row (scrolls when many options). Wraps when engine supports UIListLayout.Wraps.
+	-- Horizontal chips (wrap when supported)
 	local ChipLayout = Add("UIListLayout", {
 		Parent = ChipHost;
 		FillDirection = FD.Horizontal;
-		Padding = UD(0, 6);
+		Padding = UD(0, 8);
 		SortOrder = SO.LayoutOrder;
 		HorizontalAlignment = HFA.Left;
 		VerticalAlignment = VFA.Top;
@@ -1606,7 +1633,7 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	Dropdown.UpdateOptions = function(NewOptions: { string })
 		Dropdown.Options = NewOptions
 		Build()
-		if ExpandPanel.Visible then
+		if ExpandOverlay.Visible then
 			BuildExpand()
 		end
 
@@ -1628,10 +1655,11 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	Dropdown.Frame = OptionList
 	Dropdown.Button = ButtonFrame
 	Dropdown.ExpandPanel = ExpandPanel
+	Dropdown.ExpandOverlay = ExpandOverlay
 
 	Dropdown.OpenExpand = function(State: boolean?)
 		if State == nil then
-			State = not ExpandPanel.Visible
+			State = not ExpandOverlay.Visible
 		end
 		ExpandOpen = State == true
 		if State then
@@ -1639,21 +1667,26 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 			OptionList.Visible = false
 			Tween(Icon, { Rotation = 0 }, 0.12)
 			BuildExpand()
-			Dropdown.Frame = ExpandPanel -- click-outside treats expand as popup root
+			Dropdown.Frame = ExpandPanel -- dialog is the interactive root
 			ClaimPopup(Dropdown)
 			ExpandActions.Visible = Dropdown.Multi == true
-			local W = math.max(InputFrame.AbsoluteSize.X, 300)
-			ExpandPanel.Size = UFO(W, 0)
-			local Target = UFO(
-				InputFrame.AbsolutePosition.X,
-				InputFrame.AbsolutePosition.Y + InputFrame.AbsoluteSize.Y + 6
-			)
-			ExpandPanel.Position = Target - UFO(0, 10)
-			ExpandPanel.Visible = true
-			Tween(ExpandPanel, { Position = Target }, 0.22, ES.Quint)
+
+			-- Centered modal dialog
+			ExpandPanel.Size = UFO(420, 0)
+			ExpandPanel.AnchorPoint = V2(0.5, 0.5)
+			ExpandPanel.Position = UFS(0.5, 0.52)
+			ExpandOverlay.BackgroundTransparency = 1
+			ExpandOverlay.Visible = true
+			Tween(ExpandOverlay, { BackgroundTransparency = 0.45 }, 0.18)
+			Tween(ExpandPanel, { Position = UFS(0.5, 0.5) }, 0.25, ES.Quint)
 			Tween(ExpandBtn, { ImageTransparency = 0; ImageColor3 = Library.Theme.Accent }, 0.15)
 		else
-			ExpandPanel.Visible = false
+			Tween(ExpandOverlay, { BackgroundTransparency = 1 }, 0.15)
+			task.delay(0.12, function()
+				if not ExpandOpen then
+					ExpandOverlay.Visible = false
+				end
+			end)
 			Dropdown.Frame = OptionList
 			if not OptionList.Visible then
 				ReleasePopup(Dropdown)
@@ -1689,7 +1722,7 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 			Tween(OptionList, { Position = Target }, 0.22, ES.Quint)
 		else
 			OptionList.Visible = false
-			if not ExpandPanel.Visible then
+			if not ExpandOverlay.Visible then
 				ReleasePopup(Dropdown)
 			end
 		end
@@ -1712,16 +1745,20 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	ExpandClose.Activated:Connect(function()
 		Dropdown.OpenExpand(false)
 	end)
+	-- Click dimmed backdrop to dismiss modal
+	ExpandOverlay.Activated:Connect(function()
+		Dropdown.OpenExpand(false)
+	end)
 	ExpandBtn.Activated:Connect(function()
-		Dropdown.OpenExpand(not ExpandPanel.Visible)
+		Dropdown.OpenExpand(not ExpandOverlay.Visible)
 	end)
 	ExpandBtn.MouseEnter:Connect(function()
-		if not ExpandPanel.Visible then
+		if not ExpandOverlay.Visible then
 			Tween(ExpandBtn, { ImageTransparency = 0.1 }, 0.1)
 		end
 	end)
 	ExpandBtn.MouseLeave:Connect(function()
-		if not ExpandPanel.Visible then
+		if not ExpandOverlay.Visible then
 			Tween(ExpandBtn, { ImageTransparency = 0.35 }, 0.1)
 		end
 	end)
@@ -1734,7 +1771,7 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		end
 		LastToggle = os.clock()
 
-		if ExpandPanel.Visible then
+		if ExpandOverlay.Visible then
 			Dropdown.OpenExpand(false)
 			return
 		end
