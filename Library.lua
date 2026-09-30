@@ -1,7 +1,7 @@
---@ version: 1.2.1
+--@ version: 1.2.2
 --@ library: Noctro
 --@ updated: 2026-09-30
---@ changes: Section:Card — customizable card with title, body, image, buttons, background
+--@ changes: Fix section chevron + card badge positions; Example Settings showcase
 
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
@@ -982,7 +982,11 @@ local function SectionBuilder(Container: Frame)
 			SortOrder = SO.LayoutOrder;
 			VerticalAlignment = VFA.Center;
 		})
-		Add("UIPadding", { Parent = Header; PaddingLeft = UD(0, 10); PaddingRight = UD(0, 8); })
+		Add("UIPadding", {
+			Parent = Header;
+			PaddingLeft = UD(0, 10);
+			PaddingRight = UD(0, Section.Collapsible and 28 or 10);
+		})
 		Add("TextLabel", {
 			Parent = Header;
 			Name = "Title";
@@ -998,18 +1002,23 @@ local function SectionBuilder(Container: Frame)
 			TextSize = 14;
 			RichText = true;
 		})
+		-- Chevron pinned to the right edge of the header (not in list flow)
 		local Chevron: ImageLabel? = nil
 		if Section.Collapsible then
 			Chevron = Add("ImageLabel", {
 				Parent = Header;
 				Name = "Chevron";
 				BackgroundTransparency = 1;
-				LayoutOrder = 99;
+				AnchorPoint = V2(1, 0.5);
+				Position = UD2(1, -10, 0.5, 0);
 				Size = UFO(12, 12);
 				Image = "rbxassetid://95865107607162";
-				ImageTransparency = 0.3;
+				ImageTransparency = 0.25;
+				ImageColor3 = RGB(255, 255, 255);
+				-- expanded = points down (0°); collapsed = points right (-90°)
 				Rotation = Section.Collapsed and -90 or 0;
 				ScaleType = SCL.Fit;
+				ZIndex = 3;
 			}) :: ImageLabel
 		end
 		local SectionStroke = Add("UIStroke", { Parent = SectionFrame; ApplyStrokeMode = ASM.Border; Color = Library.Theme.SectionBorder; Thickness = 1; })
@@ -1040,12 +1049,23 @@ local function SectionBuilder(Container: Frame)
 			Section.Collapsed = State == true
 			Elements.Visible = not Section.Collapsed
 			if Chevron then
-				Tween(Chevron, { Rotation = Section.Collapsed and -90 or 0 }, 0.18)
+				-- expanded → down (0); collapsed → right (-90)
+				Tween(Chevron, {
+					Rotation = Section.Collapsed and -90 or 0;
+					ImageTransparency = Section.Collapsed and 0.15 or 0.25;
+				}, 0.18)
 			end
 		end
 
 		if Section.Collapsible and Section.Collapsed then
 			Elements.Visible = false
+			if Chevron then
+				Chevron.Rotation = -90
+				Chevron.ImageTransparency = 0.15
+			end
+		elseif Section.Collapsible and Chevron then
+			Chevron.Rotation = 0
+			Chevron.ImageTransparency = 0.25
 		end
 
 		local DragThreshold = 6
@@ -2382,7 +2402,7 @@ Library.Elements.Card = function(self: Library, propertyTable: {})
 		Size = UD2(1, 0, 0, 0);
 		AutomaticSize = AS.Y;
 		LayoutOrder = 0;
-		Visible = (Card.Title ~= "" or Card.Icon ~= nil or Card.Badge ~= nil);
+		Visible = (Card.Title ~= "" or Card.Subtitle ~= "" or Card.Icon ~= nil);
 	})
 	Add("UIListLayout", {
 		Parent = Header;
@@ -2443,19 +2463,23 @@ Library.Elements.Card = function(self: Library, propertyTable: {})
 		Visible = Card.Subtitle ~= "";
 	})
 
+	-- Badge pinned to top-right of the card (outside header list flow)
 	local BadgeLbl: TextLabel? = nil
 	if Card.Badge and Card.Badge ~= "" then
 		BadgeLbl = Add("TextLabel", {
-			Parent = Header;
+			Parent = Frame;
+			Name = "Badge";
 			BackgroundColor3 = Library.Theme.Accent;
 			BorderSizePixel = 0;
 			AutomaticSize = AS.X;
+			AnchorPoint = V2(1, 0);
+			Position = UD2(1, -(Card.Padding or 12) + 2, 0, (Card.Padding or 12) - 2);
 			Size = UFO(0, 18);
 			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
 			Text = tostring(Card.Badge);
 			TextColor3 = RGB(12, 12, 14);
 			TextSize = 10;
-			LayoutOrder = 2;
+			ZIndex = 5;
 		}) :: TextLabel
 		Add("UICorner", { Parent = BadgeLbl; CornerRadius = UD(0, 4); })
 		Add("UIPadding", { Parent = BadgeLbl; PaddingLeft = UD(0, 6); PaddingRight = UD(0, 6); })
@@ -2674,18 +2698,22 @@ Library.Elements.Card = function(self: Library, propertyTable: {})
 		if Text and Text ~= "" then
 			if not BadgeLbl then
 				BadgeLbl = Add("TextLabel", {
-					Parent = Header;
+					Parent = Frame;
+					Name = "Badge";
 					BackgroundColor3 = Library.Theme.Accent;
 					BorderSizePixel = 0;
 					AutomaticSize = AS.X;
+					AnchorPoint = V2(1, 0);
+					Position = UD2(1, -(Card.Padding or 12) + 2, 0, (Card.Padding or 12) - 2);
 					Size = UFO(0, 18);
 					FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
 					TextColor3 = RGB(12, 12, 14);
 					TextSize = 10;
-					LayoutOrder = 2;
+					ZIndex = 5;
 				}) :: TextLabel
 				Add("UICorner", { Parent = BadgeLbl; CornerRadius = UD(0, 4); })
 				Add("UIPadding", { Parent = BadgeLbl; PaddingLeft = UD(0, 6); PaddingRight = UD(0, 6); })
+				Library.ThemeLink(BadgeLbl, "BackgroundColor3", "Accent")
 			end
 			BadgeLbl.Text = tostring(Text)
 			BadgeLbl.Visible = true
