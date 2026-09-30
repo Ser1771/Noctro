@@ -1,7 +1,7 @@
---@ version: 1.1.3
+--@ version: 1.2.0
 --@ library: Noctro
---@ updated: 2026-09-27
---@ changes: Library:UiButton — floating show/hide menu button
+--@ updated: 2026-09-30
+--@ changes: SectionDrag lock, Disabled, dropdown scroll, notify history, Divider/Spacer, empty states, collapsible sections, RichText
 
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
@@ -67,6 +67,11 @@ local Library = {
 
 	Connections = {};
 	Windows = {};
+
+	-- v1.2.0: set false to disable section reorder globally
+	SectionDragEnabled = true;
+	NotifyHistory = {};
+	MaxNotifyHistory = 40;
 }
 
 Library.__index = Library
@@ -813,6 +818,12 @@ local function BeginSectionDrag(Section: any, Input: InputObject)
 	if SectionDrag.Active then
 		return
 	end
+	if Library.SectionDragEnabled == false then
+		return
+	end
+	if Section and Section.Drag == false then
+		return
+	end
 
 	local Frame = Section.Frame
 	if not Frame:FindFirstChild("Header") then
@@ -907,6 +918,9 @@ local function SectionBuilder(Container: Frame)
 			Name = "",
 			Icon = "box",
 			Side = "Left",
+			Drag = true, -- false = never reorder this section
+			Collapsible = false,
+			Collapsed = false,
 		}, propertyTable or {})
 		setmetatable(Section, { __index = Library.Elements })
 
@@ -959,6 +973,7 @@ local function SectionBuilder(Container: Frame)
 			Image = ResolveIcon(Section.Icon);
 			Position = UFS(0, 0.5);
 			Size = UFO(16, 16);
+			LayoutOrder = 0;
 		})
 		Add("UIListLayout", {
 			Parent = Header;
@@ -967,7 +982,7 @@ local function SectionBuilder(Container: Frame)
 			SortOrder = SO.LayoutOrder;
 			VerticalAlignment = VFA.Center;
 		})
-		Add("UIPadding", { Parent = Header; PaddingLeft = UD(0, 10); })
+		Add("UIPadding", { Parent = Header; PaddingLeft = UD(0, 10); PaddingRight = UD(0, 8); })
 		Add("TextLabel", {
 			Parent = Header;
 			Name = "Title";
@@ -981,7 +996,22 @@ local function SectionBuilder(Container: Frame)
 			Text = Section.Name;
 			TextColor3 = RGB(255, 255, 255);
 			TextSize = 14;
+			RichText = true;
 		})
+		local Chevron: ImageLabel? = nil
+		if Section.Collapsible then
+			Chevron = Add("ImageLabel", {
+				Parent = Header;
+				Name = "Chevron";
+				BackgroundTransparency = 1;
+				LayoutOrder = 99;
+				Size = UFO(12, 12);
+				Image = "rbxassetid://95865107607162";
+				ImageTransparency = 0.3;
+				Rotation = Section.Collapsed and -90 or 0;
+				ScaleType = SCL.Fit;
+			}) :: ImageLabel
+		end
 		local SectionStroke = Add("UIStroke", { Parent = SectionFrame; ApplyStrokeMode = ASM.Border; Color = Library.Theme.SectionBorder; Thickness = 1; })
 		Library.ThemeLink(SectionFrame, "BackgroundColor3", "Surface")
 		Library.ThemeLink(SectionStroke, "Color", "SectionBorder")
@@ -998,6 +1028,25 @@ local function SectionBuilder(Container: Frame)
 		Section.Frame = SectionFrame
 		Section.PageFrame = Container
 		Section.Side = Section.Side
+		Section.Collapsed = Section.Collapsed == true
+
+		Section.SetCollapsed = function(State: boolean?)
+			if not Section.Collapsible then
+				return
+			end
+			if State == nil then
+				State = not Section.Collapsed
+			end
+			Section.Collapsed = State == true
+			Elements.Visible = not Section.Collapsed
+			if Chevron then
+				Tween(Chevron, { Rotation = Section.Collapsed and -90 or 0 }, 0.18)
+			end
+		end
+
+		if Section.Collapsible and Section.Collapsed then
+			Elements.Visible = false
+		end
 
 		local DragThreshold = 6
 
@@ -1012,6 +1061,7 @@ local function SectionBuilder(Container: Frame)
 			local PressPos = Input.Position
 			local MoveConn: RBXScriptConnection?
 			local EndConn: RBXScriptConnection?
+			local Dragged = false
 
 			local function Cleanup()
 				if MoveConn then
@@ -1035,6 +1085,10 @@ local function SectionBuilder(Container: Frame)
 
 				local Delta = (MoveInput.Position - PressPos).Magnitude
 				if Delta >= DragThreshold then
+					if Library.SectionDragEnabled == false or Section.Drag == false then
+						return
+					end
+					Dragged = true
 					Cleanup()
 					BeginSectionDrag(Section, MoveInput)
 				end
@@ -1043,6 +1097,9 @@ local function SectionBuilder(Container: Frame)
 			EndConn = Input.Changed:Connect(function()
 				if Input.UserInputState == Enum.UserInputState.End then
 					Cleanup()
+					if not Dragged and Section.Collapsible then
+						Section.SetCollapsed()
+					end
 				end
 			end)
 		end)
@@ -1145,20 +1202,26 @@ end
 Library.Elements.Label = function(self: Library, propertyTable: {})
 	local Label = Overwrite({
 		Text = "",
+		RichText = true,
 	}, propertyTable or {})
 	setmetatable(Label, { __index = Library.SubElements })
 
 	local LabelFrame = Add("Frame", { Parent = self.Content; Name = "LabelFrame";BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UD2(1, 0, 0, 14); }) :: Frame
 	local LeftContent = Add("Frame", { Parent = LabelFrame; Name = "LeftContent"; AutomaticSize = AS.XY; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; }) :: Frame
 	local RightContent = Add("Frame", { Parent = LabelFrame; Name = "RightContent"; AnchorPoint = V2(1, 0); AutomaticSize = AS.XY; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFS(1, 0); }) :: Frame
-	Add("TextLabel", { LayoutOrder = 99; Parent = LeftContent; Name = "Label"; AnchorPoint = V2(0, 0.5); AutomaticSize = AS.XY; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Position = UD2(0, 38, 0.5, 0); Size = UFO(0, 9); Text = Label.Text; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.2; })
+	local TextLbl = Add("TextLabel", { LayoutOrder = 99; Parent = LeftContent; Name = "Label"; AnchorPoint = V2(0, 0.5); AutomaticSize = AS.XY; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Position = UD2(0, 38, 0.5, 0); Size = UFO(0, 9); Text = Label.Text; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.2; RichText = Label.RichText ~= false; })
 	Add("UIListLayout", { Parent = LeftContent; FillDirection = FD.Horizontal; Padding = UD(0, 10); SortOrder = SO.LayoutOrder; VerticalAlignment = VFA.Center; })
 	Add("UIListLayout", { Parent = RightContent; FillDirection = FD.Horizontal; HorizontalAlignment = HFA.Right; Padding = UD(0, 5); SortOrder = SO.LayoutOrder; VerticalAlignment = VFA.Center; })
 
 	Label.RightContent = RightContent
 	Label.LeftContent = LeftContent
+	Label.TextLabel = TextLbl
+	Label.SetText = function(Text: string)
+		Label.Text = Text
+		TextLbl.Text = Text
+	end
 
-	TIS(Library.Searchable, { Frame = LabelFrame; Text = Label.Text; Section = self })
+	TIS(Library.Searchable, { Frame = LabelFrame; Text = Label.Text:gsub("<.->", ""); Section = self })
 	return Label
 end
 
@@ -1170,6 +1233,7 @@ Library.Elements.Slider = function(self: Library, propertyTable: {})
 		Increment = 0.1,
 		Max = 1,
 		Min = 0,
+		Disabled = false,
 		Callback = function() end
 	}, propertyTable or {})
 
@@ -1204,8 +1268,16 @@ Library.Elements.Slider = function(self: Library, propertyTable: {})
 	end
 
 	BindSlider(Button, function(Alpha)
+		if Slider.Disabled then return end
 		Slider.Set(Slider.Min + (Slider.Max - Slider.Min) * Alpha.X)
 	end)
+
+	Slider.SetDisabled = function(State: boolean)
+		Slider.Disabled = State == true
+		Button.Active = not Slider.Disabled
+		Tween(Button, { BackgroundTransparency = Slider.Disabled and 0.45 or 0 }, 0.12)
+		Tween(Overlay, { BackgroundTransparency = Slider.Disabled and 0.55 or 0 }, 0.12)
+	end
 
 	TIS(Library.Searchable, { Frame = SliderFrame; Text = Slider.Name; Section = self })
 
@@ -1215,6 +1287,9 @@ Library.Elements.Slider = function(self: Library, propertyTable: {})
 	end
 
 	Slider.Set(Slider.Value)
+	if Slider.Disabled then
+		Slider.SetDisabled(true)
+	end
 	return Slider
 end
 
@@ -1225,6 +1300,8 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 		Value = "",
 		Multi = false,
 		Search = false,
+		MaxHeight = 180, -- compact list max height (px)
+		Disabled = false,
 		Callback = function() end,
 	}, propertyTable or {})
 
@@ -1233,9 +1310,44 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	Add("UICorner", { Parent = OptionList; CornerRadius = UD(0, 5); })
 	local OptionStroke = Add("UIStroke", { Parent = OptionList; ApplyStrokeMode = ASM.Border; Color = Library.Theme.Border; })
 	Library.ThemeLink(OptionStroke, "Color", "Border")
-	Add("UIPadding", { Parent = OptionList; })
+	Add("UIPadding", { Parent = OptionList; PaddingTop = UD(0, 4); PaddingBottom = UD(0, 4); })
 	Add("UIShadow", { Parent = OptionList; BlurRadius = UD(0, 20); Spread = UFO(5, 5); Transparency = 0.65; })
-	Add("UIListLayout", { Parent = OptionList; SortOrder = SO.LayoutOrder; })
+	Add("UIListLayout", { Parent = OptionList; SortOrder = SO.LayoutOrder; Padding = UD(0, 2); })
+	local OptionScroll = Add("ScrollingFrame", {
+		Parent = OptionList;
+		Name = "OptionScroll";
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Size = UD2(1, 0, 0, 22);
+		CanvasSize = UD2(0, 0, 0, 0);
+		AutomaticCanvasSize = AS.Y;
+		ScrollBarThickness = 3;
+		ScrollBarImageColor3 = Library.Theme.Accent;
+		ScrollingDirection = SBD.Y;
+		ClipsDescendants = true;
+		LayoutOrder = 1;
+	})
+	Library.ThemeLink(OptionScroll, "ScrollBarImageColor3", "Accent")
+	local OptionHost = Add("Frame", {
+		Parent = OptionScroll;
+		Name = "Host";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 0);
+		AutomaticSize = AS.Y;
+	})
+	Add("UIListLayout", { Parent = OptionHost; SortOrder = SO.LayoutOrder; })
+	local EmptyLabel = Add("TextLabel", {
+		Parent = OptionList;
+		Name = "Empty";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 28);
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = "No options";
+		TextColor3 = RGB(120, 124, 140);
+		TextSize = 12;
+		Visible = false;
+		LayoutOrder = 2;
+	})
 
 	-- Expanded dropdown = centered modal dialog (dim backdrop + card)
 	local ExpandOverlay = Add("TextButton", {
@@ -1572,8 +1684,15 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 			end
 		end
 
+		EmptyLabel.Visible = #VisibleOptions == 0
+		OptionScroll.Visible = #VisibleOptions > 0
+		local RowH = 22
+		local MaxH = typeof(Dropdown.MaxHeight) == "number" and Dropdown.MaxHeight or 180
+		local ContentH = math.max(#VisibleOptions, 1) * RowH
+		OptionScroll.Size = UD2(1, 0, 0, math.min(ContentH, MaxH))
+
 		for Index, Option in VisibleOptions do
-			local Button = Add("TextButton", { Parent = OptionList; Name = Option; AutoButtonColor = false; BackgroundColor3 = RGB(20, 20, 21); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); LayoutOrder = Index; Size = UD2(1, 0, 0, 22); Text = Option; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.5; TextWrapped = true; TextXAlignment = TXA.Left; }) :: TextButton
+			local Button = Add("TextButton", { Parent = OptionHost; Name = Option; AutoButtonColor = false; BackgroundColor3 = RGB(20, 20, 21); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); LayoutOrder = Index; Size = UD2(1, 0, 0, 22); Text = Option; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.5; TextWrapped = true; TextXAlignment = TXA.Left; }) :: TextButton
 			Add("UIPadding", { Parent = Button; PaddingLeft = UD(0, 10); PaddingRight = UD(0, 10); })
 
 			local First = Index == 1
@@ -1766,6 +1885,7 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	local LastToggle = 0
 
 	local function Activate()
+		if Dropdown.Disabled then return end
 		if os.clock() - LastToggle < 0.18 then
 			return
 		end
@@ -1776,6 +1896,16 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 			return
 		end
 		Dropdown.Open(not OptionList.Visible)
+	end
+
+	Dropdown.SetDisabled = function(State: boolean)
+		Dropdown.Disabled = State == true
+		InputFrame.BackgroundTransparency = Dropdown.Disabled and 0.4 or 0
+		InputText.TextTransparency = Dropdown.Disabled and 0.55 or 0.2
+		ExpandBtn.ImageTransparency = Dropdown.Disabled and 0.7 or 0.35
+		if Dropdown.Disabled then
+			Dropdown.Close()
+		end
 	end
 
 	for _, Object in { ButtonFrame, InputFrame } do
@@ -1803,6 +1933,10 @@ Library.Elements.Dropdown = function(self: Library, propertyTable: {})
 	if propertyTable and propertyTable.Flag then
 		Dropdown.Flag = propertyTable.Flag
 		Library.RegisterFlag(Dropdown.Flag, { Value = Dropdown.Value; Set = Dropdown.Set })
+	end
+
+	if Dropdown.Disabled then
+		Dropdown.SetDisabled(true)
 	end
 
 	if Dropdown.Multi then
@@ -1866,6 +2000,8 @@ Library.Elements.Button = function(self: Library, propertyTable: {})
 		Callback = function() end;
 		Height = 30;
 		Width = 1;
+		Disabled = false;
+		RichText = false;
 	}, propertyTable or {})
 
 	local Width = typeof(Button.Width) == "number" and MC(Button.Width, 0.2, 1) or 1
@@ -1935,24 +2071,41 @@ Library.Elements.Button = function(self: Library, propertyTable: {})
 	Library.ThemeLink(Grad, "Gradient", "AccentDark", "Accent")
 	Library.ThemeLink(Click, "BackgroundColor3", "SurfaceAlt")
 
+	Click.RichText = Button.RichText == true
+
 	Click.MouseEnter:Connect(function()
+		if Button.Disabled then return end
 		Grad.Enabled = true
 		Tween(Click, { BackgroundColor3 = RGB(255, 255, 255); TextColor3 = RGB(12, 12, 14); TextTransparency = 0 }, 0.12)
 	end)
 	Click.MouseLeave:Connect(function()
+		if Button.Disabled then return end
 		Grad.Enabled = false
 		Tween(Click, { BackgroundColor3 = Library.Theme.SurfaceAlt; TextColor3 = Library.Theme.Text; TextTransparency = 0.12 }, 0.12)
 	end)
 	Click.Activated:Connect(function()
+		if Button.Disabled then return end
 		Button.Callback()
 	end)
 
+	Button.SetDisabled = function(State: boolean)
+		Button.Disabled = State == true
+		Click.Active = not Button.Disabled
+		Tween(Click, {
+			TextTransparency = Button.Disabled and 0.55 or 0.12;
+			BackgroundTransparency = Button.Disabled and 0.35 or 0;
+		}, 0.12)
+		Grad.Enabled = false
+	end
 	Button.SetText = function(Text: string)
 		Button.Name = Text
 		Click.Text = Text
 	end
 	Button.Frame = Frame
 	Button.Click = Click
+	if Button.Disabled then
+		Button.SetDisabled(true)
+	end
 
 	TIS(Library.Searchable, { Frame = Frame; Text = Button.Name; Section = self })
 	return Button
@@ -1962,6 +2115,7 @@ Library.Elements.Paragraph = function(self: Library, propertyTable: {})
 	local Paragraph = Overwrite({
 		Title = "";
 		Body = "";
+		RichText = true;
 	}, propertyTable or {})
 
 	local Frame = Add("Frame", {
@@ -1972,8 +2126,9 @@ Library.Elements.Paragraph = function(self: Library, propertyTable: {})
 		BorderSizePixel = 0;
 		Size = UFS(1, 0);
 	})
+	local TitleLbl: TextLabel? = nil
 	if Paragraph.Title ~= "" then
-		Add("TextLabel", {
+		TitleLbl = Add("TextLabel", {
 			Parent = Frame;
 			BackgroundTransparency = 1;
 			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
@@ -1983,7 +2138,8 @@ Library.Elements.Paragraph = function(self: Library, propertyTable: {})
 			TextSize = 13;
 			TextTransparency = 0.15;
 			TextXAlignment = TXA.Left;
-		})
+			RichText = Paragraph.RichText ~= false;
+		}) :: TextLabel
 	end
 	local Body = Add("TextLabel", {
 		Parent = Frame;
@@ -1999,6 +2155,7 @@ Library.Elements.Paragraph = function(self: Library, propertyTable: {})
 		TextWrapped = true;
 		TextXAlignment = TXA.Left;
 		TextYAlignment = TYA.Top;
+		RichText = Paragraph.RichText ~= false;
 	})
 	Paragraph.Frame = Frame
 	Paragraph.SetBody = function(Text: string)
@@ -2007,15 +2164,77 @@ Library.Elements.Paragraph = function(self: Library, propertyTable: {})
 	end
 	Paragraph.SetTitle = function(Text: string)
 		Paragraph.Title = Text
+		if TitleLbl then TitleLbl.Text = Text end
 	end
 
-	TIS(Library.Searchable, { Frame = Frame; Text = Paragraph.Title .. " " .. Paragraph.Body; Section = self })
+	TIS(Library.Searchable, { Frame = Frame; Text = (Paragraph.Title .. " " .. Paragraph.Body):gsub("<.->", ""); Section = self })
 	return Paragraph
+end
+
+Library.Elements.Divider = function(self: Library, propertyTable: {})
+	local Props = Overwrite({
+		Text = "";
+		Height = 12;
+	}, propertyTable or {})
+
+	local Frame = Add("Frame", {
+		Parent = self.Content;
+		Name = "Divider";
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Size = UD2(1, 0, 0, Props.Height + (Props.Text ~= "" and 14 or 0));
+	})
+	if Props.Text ~= "" then
+		Add("TextLabel", {
+			Parent = Frame;
+			BackgroundTransparency = 1;
+			Size = UD2(1, 0, 0, 14);
+			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+			Text = Props.Text;
+			TextColor3 = Library.Theme.TextDim or RGB(180, 184, 200);
+			TextSize = 11;
+			TextTransparency = 0.35;
+			TextXAlignment = TXA.Left;
+			RichText = true;
+		})
+		Add("Frame", {
+			Parent = Frame;
+			BackgroundColor3 = Library.Theme.Border;
+			BorderSizePixel = 0;
+			Position = UFO(0, 18);
+			Size = UD2(1, 0, 0, 1);
+		})
+	else
+		Add("Frame", {
+			Parent = Frame;
+			AnchorPoint = V2(0, 0.5);
+			Position = UD2(0, 0, 0.5, 0);
+			BackgroundColor3 = Library.Theme.Border;
+			BorderSizePixel = 0;
+			Size = UD2(1, 0, 0, 1);
+		})
+	end
+	return { Frame = Frame; Text = Props.Text }
+end
+
+Library.Elements.Spacer = function(self: Library, propertyTable: {})
+	local Props = Overwrite({
+		Height = 10;
+	}, propertyTable or {})
+	local Frame = Add("Frame", {
+		Parent = self.Content;
+		Name = "Spacer";
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Size = UD2(1, 0, 0, Props.Height);
+	})
+	return { Frame = Frame }
 end
 
 Library.SubElements.Toggle = function(self: Library, propertyTable: {})
 	local Toggle = Overwrite({
 		State = false,
+		Disabled = false,
 		Callback = function() end
 	}, propertyTable or {})
 
@@ -2030,6 +2249,9 @@ Library.SubElements.Toggle = function(self: Library, propertyTable: {})
 	Library.ThemeLink(ToggleGrad, "Gradient", "AccentDark", "Accent")
 
 	Toggle.Set = function(state: boolean?, Silent: boolean?)
+		if Toggle.Disabled and state == nil then
+			return
+		end
 		state = state or not Toggle.State
 		Toggle.State = state
 
@@ -2055,16 +2277,26 @@ Library.SubElements.Toggle = function(self: Library, propertyTable: {})
 		Toggle.Callback(state)
 	end
 
+	Toggle.SetDisabled = function(State: boolean)
+		Toggle.Disabled = State == true
+		Button.Active = not Toggle.Disabled
+		Tween(Button, { BackgroundTransparency = Toggle.Disabled and 0.45 or 0 }, 0.12)
+	end
+
 	if propertyTable and propertyTable.Flag then
 		Toggle.Flag = propertyTable.Flag
 		Library.RegisterFlag(Toggle.Flag, { Value = Toggle.State; Set = Toggle.Set })
 	end
 
 	Button.Activated:Connect(function()
+		if Toggle.Disabled then return end
 		Toggle.Set()
 	end)
 
 	Toggle.Set(Toggle.State, true)
+	if Toggle.Disabled then
+		Toggle.SetDisabled(true)
+	end
 	return Toggle
 end
 
@@ -2619,8 +2851,67 @@ Library.Window = function(self: Library, propertyTable: {})
 
 	local Header = Add("Frame", { Parent = Canvas; Name = "Header"; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(SidebarW, 0); Size = UD2(1, -SidebarW, 0, 50); }) :: Frame
 	Library.ThemeLink(Header, "BackgroundColor3", "SurfaceAlt")
-	local SubPages = Add("Frame", { Parent = Header; Name = "SubPages"; AutomaticSize = AS.X; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(0, 1); }) :: Frame
-	local Search = Add("Frame", { Parent = Header; Name = "Search"; LayoutOrder = 1; Active = true; AnchorPoint = V2(1, 0); AutomaticSize = AS.X; BackgroundColor3 = Library.Theme.Background; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFS(1, 0); Selectable = true; Size = UD2(0, 200, 1, 0); }) :: Frame
+	local SubPages = Add("Frame", { Parent = Header; Name = "SubPages"; AutomaticSize = AS.X; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(0, 1); LayoutOrder = 0; }) :: Frame
+	local HeaderRight = Add("Frame", {
+		Parent = Header;
+		Name = "HeaderRight";
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		AutomaticSize = AS.X;
+		Size = UFS(0, 1);
+		LayoutOrder = 1;
+	})
+	Add("UIListLayout", {
+		Parent = HeaderRight;
+		FillDirection = FD.Horizontal;
+		Padding = UD(0, 8);
+		HorizontalAlignment = HFA.Right;
+		VerticalAlignment = VFA.Center;
+		SortOrder = SO.LayoutOrder;
+	})
+	-- Notification history button (next to search)
+	local HistoryBtn = Add("TextButton", {
+		Parent = HeaderRight;
+		Name = "NotifyHistory";
+		AutoButtonColor = false;
+		BackgroundColor3 = Library.Theme.Background;
+		BorderSizePixel = 0;
+		Size = UFO(32, 30);
+		Text = "";
+		LayoutOrder = 0;
+		ZIndex = 5;
+	})
+	Library.ThemeLink(HistoryBtn, "BackgroundColor3", "Background")
+	Add("UICorner", { Parent = HistoryBtn; CornerRadius = UD(0, 5); })
+	local HistoryIcon = Add("ImageLabel", {
+		Parent = HistoryBtn;
+		BackgroundTransparency = 1;
+		AnchorPoint = V2(0.5, 0.5);
+		Position = UFS(0.5, 0.5);
+		Size = UFO(15, 15);
+		Image = ResolveIcon("bell");
+		ImageTransparency = 0.35;
+		ScaleType = SCL.Fit;
+	})
+	local HistoryBadge = Add("TextLabel", {
+		Parent = HistoryBtn;
+		Name = "Badge";
+		AnchorPoint = V2(1, 0);
+		Position = UD2(1, 2, 0, -2);
+		Size = UFO(14, 14);
+		BackgroundColor3 = Library.Theme.Accent;
+		BorderSizePixel = 0;
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = "0";
+		TextColor3 = RGB(12, 12, 14);
+		TextSize = 9;
+		Visible = false;
+		ZIndex = 6;
+	})
+	Add("UICorner", { Parent = HistoryBadge; CornerRadius = UD(1, 0); })
+	Library.ThemeLink(HistoryBadge, "BackgroundColor3", "Accent")
+
+	local Search = Add("Frame", { Parent = HeaderRight; Name = "Search"; LayoutOrder = 1; Active = true; AutomaticSize = AS.X; BackgroundColor3 = Library.Theme.Background; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Selectable = true; Size = UD2(0, 180, 1, 0); }) :: Frame
 	local Pages = Add("Frame", { Parent = Canvas; Name = "Pages"; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UFO(SidebarW, 50); Size = UD2(1, -SidebarW, 1, -75); }) :: Frame
 	local Footer = Add("Frame", { Parent = Canvas; Name = "Footer"; AnchorPoint = V2(0, 1); BackgroundColor3 = Library.Theme.Surface; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UD2(0, SidebarW, 1, 0); Size = UD2(1, -SidebarW, 0, 25); }) :: Frame
 	Library.ThemeLink(Footer, "BackgroundColor3", "Surface")
@@ -2645,7 +2936,218 @@ Library.Window = function(self: Library, propertyTable: {})
 	Add("UIPadding", { Parent = Footer; PaddingBottom = UD(0, 10); PaddingLeft = UD(0, 10); PaddingRight = UD(0, 10); PaddingTop = UD(0, 10); })
 	Add("TextLabel", { Parent = Footer; AnchorPoint = V2(0, 0.5); AutomaticSize = AS.X; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Position = UFS(0, 0.5); Size = UFO(0, 13); Text = Window.Title; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.5; })
 	Add("TextLabel", { Parent = Footer; AnchorPoint = V2(1, 0.5); AutomaticSize = AS.X; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal); Position = UFS(1, 0.5); Size = UFO(0, 13); Text = Window.Footer; TextColor3 = RGB(255, 255, 255); TextSize = 13; TextTransparency = 0.5; })
-	BindDrag(Canvas, Header, true, Search)
+	BindDrag(Canvas, Header, true, HeaderRight)
+
+	-- Notification history panel (anchored under header, right side)
+	local HistoryPanel = Add("Frame", {
+		Parent = Library._Instance;
+		Name = "NotifyHistoryPanel";
+		BackgroundColor3 = Library.Theme.Surface;
+		BorderSizePixel = 0;
+		Size = UFO(280, 0);
+		AutomaticSize = AS.Y;
+		Visible = false;
+		ZIndex = PopupZ + 6;
+		Active = true;
+	})
+	Library.ThemeLink(HistoryPanel, "BackgroundColor3", "Surface")
+	Add("UICorner", { Parent = HistoryPanel; CornerRadius = UD(0, 8); })
+	local HistStroke = Add("UIStroke", { Parent = HistoryPanel; ApplyStrokeMode = ASM.Border; Color = Library.Theme.Border; })
+	Library.ThemeLink(HistStroke, "Color", "Border")
+	Add("UIShadow", { Parent = HistoryPanel; BlurRadius = UD(0, 18); Spread = UFO(4, 4); Transparency = 0.6; })
+	Add("UIPadding", {
+		Parent = HistoryPanel;
+		PaddingTop = UD(0, 10);
+		PaddingBottom = UD(0, 10);
+		PaddingLeft = UD(0, 10);
+		PaddingRight = UD(0, 10);
+	})
+	Add("UIListLayout", { Parent = HistoryPanel; Padding = UD(0, 8); SortOrder = SO.LayoutOrder; })
+	local HistHeader = Add("Frame", {
+		Parent = HistoryPanel;
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 24);
+		LayoutOrder = 0;
+	})
+	Add("TextLabel", {
+		Parent = HistHeader;
+		BackgroundTransparency = 1;
+		Size = UD2(1, -70, 1, 0);
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = "Notifications";
+		TextColor3 = Library.Theme.Text;
+		TextSize = 13;
+		TextXAlignment = TXA.Left;
+	})
+	local HistClear = Add("TextButton", {
+		Parent = HistHeader;
+		AnchorPoint = V2(1, 0.5);
+		Position = UD2(1, 0, 0.5, 0);
+		Size = UFO(64, 22);
+		BackgroundColor3 = Library.Theme.SurfaceAlt;
+		BorderSizePixel = 0;
+		AutoButtonColor = false;
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = "Clear all";
+		TextColor3 = Library.Theme.Text;
+		TextSize = 11;
+		TextTransparency = 0.2;
+	})
+	Add("UICorner", { Parent = HistClear; CornerRadius = UD(0, 5); })
+	Library.ThemeLink(HistClear, "BackgroundColor3", "SurfaceAlt")
+	local HistScroll = Add("ScrollingFrame", {
+		Parent = HistoryPanel;
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Size = UD2(1, 0, 0, 200);
+		CanvasSize = UD2(0, 0, 0, 0);
+		AutomaticCanvasSize = AS.Y;
+		ScrollBarThickness = 3;
+		ScrollBarImageColor3 = Library.Theme.Accent;
+		LayoutOrder = 1;
+		ClipsDescendants = true;
+	})
+	Library.ThemeLink(HistScroll, "ScrollBarImageColor3", "Accent")
+	local HistList = Add("Frame", {
+		Parent = HistScroll;
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 0);
+		AutomaticSize = AS.Y;
+	})
+	Add("UIListLayout", { Parent = HistList; Padding = UD(0, 6); SortOrder = SO.LayoutOrder; })
+	local HistEmpty = Add("TextLabel", {
+		Parent = HistList;
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 36);
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = "No notifications yet";
+		TextColor3 = RGB(120, 124, 140);
+		TextSize = 12;
+		LayoutOrder = 0;
+	})
+
+	local function RefreshHistoryBadge()
+		local N = #Library.NotifyHistory
+		HistoryBadge.Visible = N > 0
+		HistoryBadge.Text = N > 9 and "9+" or tostring(N)
+	end
+
+	local function RebuildHistoryList()
+		for _, Ch in HistList:GetChildren() do
+			if Ch:IsA("GuiObject") and Ch ~= HistEmpty then
+				Ch:Destroy()
+			end
+		end
+		local Items = Library.NotifyHistory
+		HistEmpty.Visible = #Items == 0
+		for i = #Items, 1, -1 do
+			local Entry = Items[i]
+			local Row = Add("Frame", {
+				Parent = HistList;
+				BackgroundColor3 = Library.Theme.SurfaceAlt;
+				BorderSizePixel = 0;
+				Size = UD2(1, 0, 0, 0);
+				AutomaticSize = AS.Y;
+				LayoutOrder = #Items - i + 1;
+			})
+			Add("UICorner", { Parent = Row; CornerRadius = UD(0, 6); })
+			Add("UIPadding", {
+				Parent = Row;
+				PaddingTop = UD(0, 6);
+				PaddingBottom = UD(0, 6);
+				PaddingLeft = UD(0, 8);
+				PaddingRight = UD(0, 8);
+			})
+			Add("UIListLayout", { Parent = Row; Padding = UD(0, 2); SortOrder = SO.LayoutOrder; })
+			Add("TextLabel", {
+				Parent = Row;
+				BackgroundTransparency = 1;
+				Size = UD2(1, 0, 0, 14);
+				FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+				Text = Entry.Title or "Notification";
+				TextColor3 = Entry.TypeColor or Library.Theme.Text;
+				TextSize = 12;
+				TextXAlignment = TXA.Left;
+				TextTruncate = ETT.AtEnd;
+				RichText = true;
+				LayoutOrder = 0;
+			})
+			if Entry.Text and Entry.Text ~= "" then
+				Add("TextLabel", {
+					Parent = Row;
+					BackgroundTransparency = 1;
+					Size = UD2(1, 0, 0, 0);
+					AutomaticSize = AS.Y;
+					FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+					Text = Entry.Text;
+					TextColor3 = RGB(155, 158, 168);
+					TextSize = 11;
+					TextXAlignment = TXA.Left;
+					TextWrapped = true;
+					RichText = true;
+					LayoutOrder = 1;
+				})
+			end
+			Add("TextLabel", {
+				Parent = Row;
+				BackgroundTransparency = 1;
+				Size = UD2(1, 0, 0, 12);
+				FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+				Text = Entry.Time or "";
+				TextColor3 = RGB(110, 114, 128);
+				TextSize = 10;
+				TextXAlignment = TXA.Left;
+				LayoutOrder = 2;
+			})
+		end
+		RefreshHistoryBadge()
+	end
+
+	local HistoryOpen = false
+	local function OpenHistory(State: boolean?)
+		if State == nil then State = not HistoryPanel.Visible end
+		HistoryOpen = State == true
+		if State then
+			RebuildHistoryList()
+			local Target = UFO(
+				HistoryBtn.AbsolutePosition.X + HistoryBtn.AbsoluteSize.X - 280,
+				HistoryBtn.AbsolutePosition.Y + HistoryBtn.AbsoluteSize.Y + 6
+			)
+			HistoryPanel.Position = Target
+			HistoryPanel.Visible = true
+			Tween(HistoryIcon, { ImageTransparency = 0; ImageColor3 = Library.Theme.Accent }, 0.12)
+		else
+			HistoryPanel.Visible = false
+			Tween(HistoryIcon, { ImageTransparency = 0.35; ImageColor3 = RGB(255, 255, 255) }, 0.12)
+		end
+	end
+
+	HistoryBtn.Activated:Connect(function()
+		OpenHistory()
+	end)
+	HistClear.Activated:Connect(function()
+		if Library.ClearNotifications then
+			Library.ClearNotifications()
+		end
+		table.clear(Library.NotifyHistory)
+		RebuildHistoryList()
+	end)
+	HistoryBtn.MouseEnter:Connect(function()
+		if not HistoryOpen then
+			Tween(HistoryIcon, { ImageTransparency = 0.1 }, 0.1)
+		end
+	end)
+	HistoryBtn.MouseLeave:Connect(function()
+		if not HistoryOpen then
+			Tween(HistoryIcon, { ImageTransparency = 0.35 }, 0.1)
+		end
+	end)
+
+	Window.OpenNotifyHistory = OpenHistory
+	Window.RefreshNotifyHistory = RebuildHistoryList
+	Library._HistoryWindows = Library._HistoryWindows or {}
+	TIS(Library._HistoryWindows, Window)
+	RefreshHistoryBadge()
 
 	Window.Canvas = Canvas
 	TIS(Library.Windows, Window)
@@ -4290,6 +4792,13 @@ Library._Toasts = {}
 Library.MaxNotifications = 4
 Library.NotifyToggles = true
 
+Library.ClearNotifications = function()
+	while #Library._Toasts > 0 do
+		local Oldest = table.remove(Library._Toasts, 1)
+		if Oldest then pcall(Oldest) end
+	end
+end
+
 Library.Notify = function(propertyTable: {})
 	local Props = Overwrite({
 		Title = "Notification";
@@ -4298,6 +4807,8 @@ Library.Notify = function(propertyTable: {})
 		Duration = 4;
 		Type = "Info";
 		Icon = nil;
+		Action = nil; -- { Text = "OK", Callback = function() end }
+		RichText = true;
 	}, propertyTable or {})
 
 	local Content = Props.Content or Props.Text or Props.Message or ""
@@ -4311,6 +4822,23 @@ Library.Notify = function(propertyTable: {})
 		TypeColor = RGB(240, 176, 108)
 	elseif Props.Type == "Error" then
 		TypeColor = RGB(240, 120, 120)
+	end
+
+	Library.NotifyHistory = Library.NotifyHistory or {}
+	TIS(Library.NotifyHistory, {
+		Title = Props.Title;
+		Text = Content;
+		Type = Props.Type;
+		TypeColor = TypeColor;
+		Time = os.date("%H:%M:%S");
+	})
+	while #Library.NotifyHistory > (Library.MaxNotifyHistory or 40) do
+		table.remove(Library.NotifyHistory, 1)
+	end
+	for _, Win in (Library._HistoryWindows or {}) do
+		if Win.RefreshNotifyHistory then
+			pcall(Win.RefreshNotifyHistory)
+		end
 	end
 
 	local Gui = EnsureOverlayGui()
@@ -4354,7 +4882,8 @@ Library.Notify = function(propertyTable: {})
 	Library._NotifyOrder = (Library._NotifyOrder or 0) + 1
 
 	local HasBody = Content ~= ""
-	local CardH = HasBody and 52 or 36
+	local HasAction = type(Props.Action) == "table" and type(Props.Action.Text) == "string"
+	local CardH = (HasBody and 52 or 36) + (HasAction and 22 or 0)
 	local SlideDir = (string.find(Pos, "Left") and -1) or 1
 
 	local Slot = Add("Frame", {
@@ -4469,8 +4998,29 @@ Library.Notify = function(propertyTable: {})
 			TextSize = 11;
 			TextXAlignment = TXA.Left;
 			TextTruncate = ETT.AtEnd;
+			RichText = Props.RichText ~= false;
 			ZIndex = 4;
 		})
+	end
+
+	local ActionBtn: TextButton? = nil
+	if HasAction then
+		ActionBtn = Add("TextButton", {
+			Parent = Body;
+			Position = UFO(0, HasBody and 32 or 16);
+			Size = UFO(0, 18);
+			AutomaticSize = AS.X;
+			BackgroundColor3 = T.Accent;
+			BorderSizePixel = 0;
+			AutoButtonColor = false;
+			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+			Text = Props.Action.Text;
+			TextColor3 = RGB(12, 12, 14);
+			TextSize = 11;
+			ZIndex = 5;
+		}) :: TextButton
+		Add("UICorner", { Parent = ActionBtn; CornerRadius = UD(0, 4); })
+		Add("UIPadding", { Parent = ActionBtn; PaddingLeft = UD(0, 8); PaddingRight = UD(0, 8); })
 	end
 
 	local BarBG = Add("Frame", {
@@ -4521,6 +5071,14 @@ Library.Notify = function(propertyTable: {})
 
 	task.delay(Duration, Dismiss)
 	Close.Activated:Connect(Dismiss)
+	if ActionBtn then
+		ActionBtn.Activated:Connect(function()
+			if type(Props.Action.Callback) == "function" then
+				pcall(Props.Action.Callback)
+			end
+			Dismiss()
+		end)
+	end
 	TIS(Library._Toasts, Dismiss)
 
 	while #Library._Toasts > (Library.MaxNotifications or 4) do
