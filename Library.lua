@@ -1,7 +1,7 @@
---@ version: 1.2.0
+--@ version: 1.2.1
 --@ library: Noctro
 --@ updated: 2026-09-30
---@ changes: SectionDrag lock, Disabled, dropdown scroll, notify history, Divider/Spacer, empty states, collapsible sections, RichText
+--@ changes: Section:Card — customizable card with title, body, image, buttons, background
 
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
@@ -2229,6 +2229,478 @@ Library.Elements.Spacer = function(self: Library, propertyTable: {})
 		Size = UD2(1, 0, 0, Props.Height);
 	})
 	return { Frame = Frame }
+end
+
+--[[
+	Custom content card.
+
+	Section:Card({
+		Title = "Premium",
+		Subtitle = "Unlock extras",
+		Icon = "star",
+		Body = "Optional <b>RichText</b> body",
+		Image = "rbxassetid://…",   -- optional banner
+		ImageHeight = 80,
+		Background = Color3… or "SurfaceAlt",
+		BackgroundTransparency = 0,
+		Stroke = true,
+		Corner = 8,
+		Padding = 12,
+		Width = 1,                  -- 0.2–1 row packing
+		OnClick = function() end,   -- whole-card click
+		Buttons = {
+			{ Name = "Get key"; Style = "Accent"; Callback = fn },
+			{ Name = "Later"; Style = "Ghost"; Callback = fn },
+		},
+		Badge = "NEW",
+		Gradient = { Color3…, Color3… }, -- optional
+		RichText = true,
+	})
+]]
+Library.Elements.Card = function(self: Library, propertyTable: {})
+	local Card = Overwrite({
+		Title = "";
+		Subtitle = "";
+		Icon = nil;
+		Body = "";
+		Image = nil;
+		ImageHeight = 80;
+		Background = nil; -- Color3 or Theme key string
+		BackgroundTransparency = 0;
+		Stroke = true;
+		StrokeColor = nil;
+		Corner = 8;
+		Padding = 12;
+		Width = 1;
+		Height = nil;
+		OnClick = nil;
+		Buttons = {};
+		Badge = nil;
+		Gradient = nil; -- { Color3, Color3 }
+		RichText = true;
+	}, propertyTable or {})
+
+	local Width = typeof(Card.Width) == "number" and MC(Card.Width, 0.2, 1) or 1
+	local ParentFrame = self.Content
+	if Width < 0.999 then
+		if not self._CardRow or self._CardRowRemain < Width - 0.001 then
+			self._CardRow = Add("Frame", {
+				Parent = self.Content;
+				Name = "CardRow";
+				BackgroundTransparency = 1;
+				BorderSizePixel = 0;
+				Size = UD2(1, 0, 0, 0);
+				AutomaticSize = AS.Y;
+			})
+			Add("UIListLayout", {
+				Parent = self._CardRow;
+				FillDirection = FD.Horizontal;
+				Padding = UD(0, 8);
+				SortOrder = SO.LayoutOrder;
+			})
+			self._CardRowRemain = 1
+		end
+		ParentFrame = self._CardRow
+		self._CardRowRemain = self._CardRowRemain - Width
+	end
+
+	local function ResolveBg(): Color3
+		local Bg = Card.Background
+		if typeof(Bg) == "Color3" then
+			return Bg
+		end
+		if type(Bg) == "string" and Library.Theme[Bg] then
+			return Library.Theme[Bg]
+		end
+		return Library.Theme.SurfaceAlt or RGB(22, 22, 24)
+	end
+
+	local Root = Add("Frame", {
+		Parent = ParentFrame;
+		Name = "Card";
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Size = UD2(Width, Width < 1 and -4 or 0, 0, 0);
+		AutomaticSize = AS.Y;
+	})
+	if Width >= 0.999 then
+		Root.Size = UD2(1, 0, 0, 0)
+	end
+
+	local Frame = Add("TextButton", {
+		Parent = Root;
+		Name = "Inner";
+		AutoButtonColor = false;
+		BackgroundColor3 = ResolveBg();
+		BackgroundTransparency = Card.BackgroundTransparency or 0;
+		BorderSizePixel = 0;
+		Size = UD2(1, 0, 0, 0);
+		AutomaticSize = AS.Y;
+		Text = "";
+		Active = type(Card.OnClick) == "function";
+	})
+	Add("UICorner", { Parent = Frame; CornerRadius = UD(0, Card.Corner or 8); })
+	if Card.Stroke ~= false then
+		local St = Add("UIStroke", {
+			Parent = Frame;
+			ApplyStrokeMode = ASM.Border;
+			Color = Card.StrokeColor or Library.Theme.Border;
+			Thickness = 1;
+		})
+		if not Card.StrokeColor then
+			Library.ThemeLink(St, "Color", "Border")
+		end
+	end
+	if type(Card.Gradient) == "table" and typeof(Card.Gradient[1]) == "Color3" and typeof(Card.Gradient[2]) == "Color3" then
+		Add("UIGradient", {
+			Parent = Frame;
+			Color = CS{ CSK(0, Card.Gradient[1]), CSK(1, Card.Gradient[2]) };
+			Rotation = -90;
+		})
+	elseif type(Card.Background) == "string" and Library.Theme[Card.Background] then
+		Library.ThemeLink(Frame, "BackgroundColor3", Card.Background)
+	end
+
+	Add("UIPadding", {
+		Parent = Frame;
+		PaddingTop = UD(0, Card.Padding or 12);
+		PaddingBottom = UD(0, Card.Padding or 12);
+		PaddingLeft = UD(0, Card.Padding or 12);
+		PaddingRight = UD(0, Card.Padding or 12);
+	})
+	Add("UIListLayout", {
+		Parent = Frame;
+		Padding = UD(0, 8);
+		SortOrder = SO.LayoutOrder;
+	})
+
+	-- Header row
+	local Header = Add("Frame", {
+		Parent = Frame;
+		Name = "Header";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 0);
+		AutomaticSize = AS.Y;
+		LayoutOrder = 0;
+		Visible = (Card.Title ~= "" or Card.Icon ~= nil or Card.Badge ~= nil);
+	})
+	Add("UIListLayout", {
+		Parent = Header;
+		FillDirection = FD.Horizontal;
+		Padding = UD(0, 8);
+		VerticalAlignment = VFA.Center;
+		SortOrder = SO.LayoutOrder;
+	})
+
+	if Card.Icon then
+		Add("ImageLabel", {
+			Parent = Header;
+			BackgroundTransparency = 1;
+			Size = UFO(18, 18);
+			Image = ResolveIcon(Card.Icon);
+			ImageColor3 = Library.Theme.Text;
+			ScaleType = SCL.Fit;
+			LayoutOrder = 0;
+		})
+	end
+
+	local TitleCol = Add("Frame", {
+		Parent = Header;
+		BackgroundTransparency = 1;
+		Size = UD2(1, -40, 0, 0);
+		AutomaticSize = AS.Y;
+		LayoutOrder = 1;
+	})
+	Add("UIListLayout", { Parent = TitleCol; Padding = UD(0, 2); SortOrder = SO.LayoutOrder; })
+	local TitleLbl = Add("TextLabel", {
+		Parent = TitleCol;
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 16);
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = Card.Title;
+		TextColor3 = Library.Theme.Text;
+		TextSize = 14;
+		TextXAlignment = TXA.Left;
+		TextTruncate = ETT.AtEnd;
+		RichText = Card.RichText ~= false;
+		LayoutOrder = 0;
+		Visible = Card.Title ~= "";
+	})
+	Library.ThemeLink(TitleLbl, "TextColor3", "Text")
+	local SubLbl = Add("TextLabel", {
+		Parent = TitleCol;
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 14);
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = Card.Subtitle;
+		TextColor3 = Library.Theme.TextDim or RGB(180, 184, 200);
+		TextSize = 11;
+		TextTransparency = 0.15;
+		TextXAlignment = TXA.Left;
+		TextTruncate = ETT.AtEnd;
+		RichText = Card.RichText ~= false;
+		LayoutOrder = 1;
+		Visible = Card.Subtitle ~= "";
+	})
+
+	local BadgeLbl: TextLabel? = nil
+	if Card.Badge and Card.Badge ~= "" then
+		BadgeLbl = Add("TextLabel", {
+			Parent = Header;
+			BackgroundColor3 = Library.Theme.Accent;
+			BorderSizePixel = 0;
+			AutomaticSize = AS.X;
+			Size = UFO(0, 18);
+			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+			Text = tostring(Card.Badge);
+			TextColor3 = RGB(12, 12, 14);
+			TextSize = 10;
+			LayoutOrder = 2;
+		}) :: TextLabel
+		Add("UICorner", { Parent = BadgeLbl; CornerRadius = UD(0, 4); })
+		Add("UIPadding", { Parent = BadgeLbl; PaddingLeft = UD(0, 6); PaddingRight = UD(0, 6); })
+		Library.ThemeLink(BadgeLbl, "BackgroundColor3", "Accent")
+	end
+
+	-- Image
+	local ImageLbl: ImageLabel? = nil
+	if Card.Image and Card.Image ~= "" then
+		ImageLbl = Add("ImageLabel", {
+			Parent = Frame;
+			Name = "Image";
+			BackgroundColor3 = Library.Theme.Background or RGB(12, 12, 14);
+			BorderSizePixel = 0;
+			Size = UD2(1, 0, 0, Card.ImageHeight or 80);
+			Image = ResolveIcon(Card.Image);
+			ScaleType = SCL.Crop;
+			LayoutOrder = 1;
+		}) :: ImageLabel
+		Add("UICorner", { Parent = ImageLbl; CornerRadius = UD(0, 6); })
+	end
+
+	-- Body
+	local BodyLbl = Add("TextLabel", {
+		Parent = Frame;
+		Name = "Body";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 0);
+		AutomaticSize = AS.Y;
+		FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+		Text = Card.Body;
+		TextColor3 = Library.Theme.TextDim or RGB(180, 184, 200);
+		TextSize = 12;
+		TextTransparency = 0.1;
+		TextWrapped = true;
+		TextXAlignment = TXA.Left;
+		TextYAlignment = TYA.Top;
+		RichText = Card.RichText ~= false;
+		LayoutOrder = 2;
+		Visible = Card.Body ~= "";
+	})
+
+	-- Free content slot (user can parent custom UI)
+	local ContentHost = Add("Frame", {
+		Parent = Frame;
+		Name = "Content";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 0);
+		AutomaticSize = AS.Y;
+		LayoutOrder = 3;
+	})
+	Add("UIListLayout", { Parent = ContentHost; Padding = UD(0, 6); SortOrder = SO.LayoutOrder; })
+
+	-- Button row
+	local BtnRow = Add("Frame", {
+		Parent = Frame;
+		Name = "Buttons";
+		BackgroundTransparency = 1;
+		Size = UD2(1, 0, 0, 0);
+		AutomaticSize = AS.Y;
+		LayoutOrder = 4;
+		Visible = false;
+	})
+	Add("UIListLayout", {
+		Parent = BtnRow;
+		FillDirection = FD.Horizontal;
+		Padding = UD(0, 8);
+		SortOrder = SO.LayoutOrder;
+		HorizontalAlignment = HFA.Left;
+	})
+
+	local function StyleBtn(Btn: TextButton, Style: string?)
+		Style = Style or "Surface"
+		if Style == "Accent" then
+			Btn.BackgroundColor3 = Library.Theme.Accent
+			Btn.TextColor3 = RGB(12, 12, 14)
+			Btn.TextTransparency = 0
+			local G = Add("UIGradient", {
+				Parent = Btn;
+				Color = CS{ CSK(0, Library.Theme.AccentDark), CSK(1, Library.Theme.Accent) };
+				Rotation = -90;
+			})
+			Library.ThemeLink(G, "Gradient", "AccentDark", "Accent")
+		elseif Style == "Danger" then
+			Btn.BackgroundColor3 = RGB(180, 60, 60)
+			Btn.TextColor3 = RGB(255, 230, 230)
+		elseif Style == "Ghost" then
+			Btn.BackgroundTransparency = 1
+			Btn.TextColor3 = Library.Theme.Text
+			Btn.TextTransparency = 0.2
+			local St = Add("UIStroke", {
+				Parent = Btn;
+				ApplyStrokeMode = ASM.Border;
+				Color = Library.Theme.Border;
+			})
+			Library.ThemeLink(St, "Color", "Border")
+		else -- Surface
+			Btn.BackgroundColor3 = Library.Theme.Background or RGB(15, 14, 15)
+			Btn.TextColor3 = Library.Theme.Text
+			Btn.TextTransparency = 0.1
+		end
+	end
+
+	local function AddCardButton(Def: {})
+		Def = Def or {}
+		local Name = Def.Name or Def.Text or "Button"
+		local Btn = Add("TextButton", {
+			Parent = BtnRow;
+			AutoButtonColor = false;
+			AutomaticSize = AS.X;
+			Size = UFO(0, 28);
+			BorderSizePixel = 0;
+			FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+			Text = Name;
+			TextSize = 12;
+			LayoutOrder = #BtnRow:GetChildren();
+		})
+		Add("UICorner", { Parent = Btn; CornerRadius = UD(0, 6); })
+		Add("UIPadding", { Parent = Btn; PaddingLeft = UD(0, 12); PaddingRight = UD(0, 12); })
+		StyleBtn(Btn, Def.Style)
+		Btn.Activated:Connect(function()
+			if type(Def.Callback) == "function" then
+				pcall(Def.Callback)
+			end
+		end)
+		BtnRow.Visible = true
+		return Btn
+	end
+
+	if type(Card.Buttons) == "table" then
+		for _, Def in Card.Buttons do
+			AddCardButton(Def)
+		end
+	end
+
+	if type(Card.OnClick) == "function" then
+		Frame.Activated:Connect(function()
+			pcall(Card.OnClick)
+		end)
+		Frame.MouseEnter:Connect(function()
+			Tween(Frame, { BackgroundTransparency = math.min((Card.BackgroundTransparency or 0) + 0.08, 0.5) }, 0.12)
+		end)
+		Frame.MouseLeave:Connect(function()
+			Tween(Frame, { BackgroundTransparency = Card.BackgroundTransparency or 0 }, 0.12)
+		end)
+	end
+
+	-- API
+	Card.Frame = Root
+	Card.Inner = Frame
+	Card.Content = ContentHost
+
+	Card.SetTitle = function(Text: string)
+		Card.Title = Text or ""
+		TitleLbl.Text = Card.Title
+		TitleLbl.Visible = Card.Title ~= ""
+		Header.Visible = (Card.Title ~= "" or Card.Subtitle ~= "" or Card.Icon ~= nil or (Card.Badge and Card.Badge ~= ""))
+	end
+	Card.SetSubtitle = function(Text: string)
+		Card.Subtitle = Text or ""
+		SubLbl.Text = Card.Subtitle
+		SubLbl.Visible = Card.Subtitle ~= ""
+	end
+	Card.SetBody = function(Text: string)
+		Card.Body = Text or ""
+		BodyLbl.Text = Card.Body
+		BodyLbl.Visible = Card.Body ~= ""
+	end
+	Card.SetBackground = function(Bg: any, Transparency: number?)
+		Card.Background = Bg
+		if Transparency ~= nil then
+			Card.BackgroundTransparency = Transparency
+			Frame.BackgroundTransparency = Transparency
+		end
+		Frame.BackgroundColor3 = ResolveBg()
+	end
+	Card.SetImage = function(Image: any, Height: number?)
+		Card.Image = Image
+		if Height then Card.ImageHeight = Height end
+		if Image and Image ~= "" then
+			if not ImageLbl then
+				ImageLbl = Add("ImageLabel", {
+					Parent = Frame;
+					Name = "Image";
+					BackgroundColor3 = Library.Theme.Background or RGB(12, 12, 14);
+					BorderSizePixel = 0;
+					Size = UD2(1, 0, 0, Card.ImageHeight or 80);
+					ScaleType = SCL.Crop;
+					LayoutOrder = 1;
+				}) :: ImageLabel
+				Add("UICorner", { Parent = ImageLbl; CornerRadius = UD(0, 6); })
+			end
+			ImageLbl.Image = ResolveIcon(Image)
+			ImageLbl.Size = UD2(1, 0, 0, Card.ImageHeight or 80)
+			ImageLbl.Visible = true
+		elseif ImageLbl then
+			ImageLbl.Visible = false
+		end
+	end
+	Card.AddButton = function(Def: {})
+		return AddCardButton(Def)
+	end
+	Card.ClearButtons = function()
+		for _, Ch in BtnRow:GetChildren() do
+			if Ch:IsA("TextButton") then
+				Ch:Destroy()
+			end
+		end
+		BtnRow.Visible = false
+	end
+	Card.SetVisible = function(Vis: boolean)
+		Root.Visible = Vis == true
+	end
+	Card.SetBadge = function(Text: string?)
+		Card.Badge = Text
+		if Text and Text ~= "" then
+			if not BadgeLbl then
+				BadgeLbl = Add("TextLabel", {
+					Parent = Header;
+					BackgroundColor3 = Library.Theme.Accent;
+					BorderSizePixel = 0;
+					AutomaticSize = AS.X;
+					Size = UFO(0, 18);
+					FontFace = FN("rbxassetid://12187365364", FW.SemiBold, FS.Normal);
+					TextColor3 = RGB(12, 12, 14);
+					TextSize = 10;
+					LayoutOrder = 2;
+				}) :: TextLabel
+				Add("UICorner", { Parent = BadgeLbl; CornerRadius = UD(0, 4); })
+				Add("UIPadding", { Parent = BadgeLbl; PaddingLeft = UD(0, 6); PaddingRight = UD(0, 6); })
+			end
+			BadgeLbl.Text = tostring(Text)
+			BadgeLbl.Visible = true
+		elseif BadgeLbl then
+			BadgeLbl.Visible = false
+		end
+	end
+
+	TIS(Library.Searchable, {
+		Frame = Root;
+		Text = (Card.Title .. " " .. Card.Subtitle .. " " .. Card.Body):gsub("<.->", "");
+		Section = self;
+	})
+
+	return Card
 end
 
 Library.SubElements.Toggle = function(self: Library, propertyTable: {})
