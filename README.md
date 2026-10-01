@@ -4,14 +4,6 @@ Roblox Luau UI library for executor scripts — windows, pages, sections, flags,
 
 **Current version:** `1.2.2`
 
-```
-Ui/Noctro/
-  Files/Library.lua    ← main library
-  Files/Example.lua    ← full demo
-  Backups/             ← versioned snapshots
-  README.md
-```
-
 ---
 
 ## Quick start
