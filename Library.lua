@@ -1,7 +1,7 @@
---@ version: 1.2.3
+--@ version: 1.2.5
 --@ library: Noctro
 --@ updated: 2026-10-01
---@ changes: OnUnload callback; BuildConfigPage — section drag lock, tab style, more menu controls
+--@ changes: BuildConfigPage Menu reorganized — scale, notify, layout, overlays complete
 
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
@@ -68,8 +68,8 @@ local Library = {
 	Connections = {};
 	Windows = {};
 
-	-- v1.2.0: set false to disable section reorder globally
-	SectionDragEnabled = true;
+	-- section / tab reorder locked by default
+	SectionDragEnabled = false;
 	NotifyHistory = {};
 	MaxNotifyHistory = 40;
 }
@@ -2738,10 +2738,11 @@ Library.SubElements.Toggle = function(self: Library, propertyTable: {})
 		Callback = function() end
 	}, propertyTable or {})
 
+	-- Start visually OFF (Set will sync)
 	local Button = Add("TextButton", { Parent = self.LeftContent; Name = "Toggle"; AutoButtonColor = false; BackgroundColor3 = Library.Theme.SurfaceAlt; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; FontFace = FN("rbxasset://fonts/families/SourceSansPro.json", FW.Regular, FS.Normal); Size = UFO(28, 14); Text = ""; TextColor3 = RGB(0, 0, 0); TextSize = 14; }) :: TextButton
 	Library.ThemeLink(Button, "BackgroundColor3", "SurfaceAlt")
-	local Indicator = Add("Frame", { Parent = Button; Name = "Indicator"; AnchorPoint = V2(1, 0.5); BackgroundColor3 = RGB(0, 0, 0); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UD2(1, -3, 0.5, 0); Size = UFO(10, 10); ZIndex = 2; }) :: Frame
-	local Overlay = Add("Frame", { Parent = Button; Name = "Overlay"; BackgroundColor3 = RGB(255, 255, 255); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(1, 1); }) :: Frame
+	local Indicator = Add("Frame", { Parent = Button; Name = "Indicator"; AnchorPoint = V2(0, 0.5); BackgroundColor3 = RGB(0, 0, 0); BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Position = UD2(0, 3, 0.5, 0); Size = UFO(10, 10); ZIndex = 2; }) :: Frame
+	local Overlay = Add("Frame", { Parent = Button; Name = "Overlay"; BackgroundColor3 = RGB(255, 255, 255); BackgroundTransparency = 1; BorderColor3 = RGB(0, 0, 0); BorderSizePixel = 0; Size = UFS(1, 1); }) :: Frame
 	Add("UICorner", { Parent = Button; CornerRadius = UD(0, 6); })
 	Add("UICorner", { Parent = Indicator; CornerRadius = UD(1, 0); })
 	Add("UICorner", { Parent = Overlay; CornerRadius = UD(0, 6); })
@@ -2752,11 +2753,19 @@ Library.SubElements.Toggle = function(self: Library, propertyTable: {})
 		if Toggle.Disabled and state == nil then
 			return
 		end
-		state = state or not Toggle.State
+		-- IMPORTANT: cannot use `state or …` — false is valid and must not become a toggle
+		if state == nil then
+			state = not Toggle.State
+		else
+			state = state == true
+		end
 		Toggle.State = state
 
 		Tween(Overlay, { BackgroundTransparency = state and 0 or 1 }, 0.1)
-		Tween(Indicator, { Position = state and UD2(1, -3, 0.5, 0) or UD2(0, 3, 0.5, 0), AnchorPoint = state and V2(1, 0.5) or V2(0, 0.5)}, 0.1)
+		Tween(Indicator, {
+			Position = state and UD2(1, -3, 0.5, 0) or UD2(0, 3, 0.5, 0);
+			AnchorPoint = state and V2(1, 0.5) or V2(0, 0.5);
+		}, 0.1)
 
 		if Toggle.Flag then
 			Library.Flags[Toggle.Flag] = Library.Flags[Toggle.Flag] or {}
@@ -5893,7 +5902,7 @@ Library.Track(UserInputService.InputBegan:Connect(function(Input, GameProcessed)
 end))
 
 Library.BuildConfigPage = function(self: Library, Window: any)
-	local Page = Window:Page({ Icon = "save" })
+	local Page = Window:Page({ Icon = "save"; Name = "Configs" })
 	local Manager = Page:SubPage({ Name = "Configs" })
 	local ThemePage = Page:SubPage({ Name = "Theme" })
 	local MenuPage = Page:SubPage({ Name = "Menu" })
@@ -5902,7 +5911,10 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 	local ActionsSection = Manager:Section({ Name = "Actions"; Side = "Right"; Icon = "settings" })
 	local ThemeSection = ThemePage:Section({ Name = "Colors"; Side = "Left"; Icon = "palette" })
 	local ThemePrev = ThemePage:Section({ Name = "Preview"; Side = "Right"; Icon = "eye" })
+	-- Menu tab: split so scale / notify / layout are all visible (not buried in one long column)
 	local MenuSection = MenuPage:Section({ Name = "Menu"; Side = "Left"; Icon = "settings" })
+	local OverlaySection = MenuPage:Section({ Name = "Overlays"; Side = "Left"; Icon = "eye" })
+	local LayoutSection = MenuPage:Section({ Name = "Layout"; Side = "Right"; Icon = "layers" })
 	local NotifySection = MenuPage:Section({ Name = "Notifications"; Side = "Right"; Icon = "bell" })
 
 	local Selected = { Name = nil :: string? }
@@ -6142,81 +6154,17 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 		end;
 	})
 
-	-- Layout / behavior
-	local DragLock = MenuSection:Label({ Text = "Section drag" })
-	DragLock:Toggle({
-		State = Library.SectionDragEnabled ~= false;
-		Flag = "SectionDragEnabled";
-		Callback = function(State)
-			Library.SectionDragEnabled = State == true
-		end;
-	})
-
-	local TabEdit = MenuSection:Label({ Text = "Tab reorder" })
-	TabEdit:Toggle({
-		State = Window.TabEditMode == true;
-		Flag = "TabEditMode";
-		Callback = function(State)
-			Window.TabEditMode = State == true
-			-- sync small sidebar lock switch if present
-			if Window.TabEditButton and Window.TabEditButton.Set then
-				pcall(Window.TabEditButton.Set, State == true)
-			elseif Window._SetTabEditMode then
-				pcall(Window._SetTabEditMode, State == true)
-			end
-		end;
-	})
-
-	MenuSection:Dropdown({
-		Name = "Tab style";
-		Options = { "Icon", "IconText" };
-		Value = Window.TabStyle or "Icon";
-		Flag = "TabStyle";
+	-- ── Menu (key, scale, actions) ──
+	MenuSection:Slider({
+		Name = "UI scale";
+		Suffix = "%";
+		Value = math.floor((Library.UIScale or 1) * 100);
+		Min = 75;
+		Max = 125;
+		Increment = 5;
+		Flag = "UIScale";
 		Callback = function(Value)
-			local Style = Value == "IconText" and "IconText" or "Icon"
-			Window.TabStyle = Style
-			local SidebarW = Style == "IconText" and 118 or 75
-			Window.SidebarWidth = SidebarW
-			-- Best-effort live resize of this window chrome
-			local Canvas = Window.Canvas
-			if Canvas then
-				local Sidebar = Canvas:FindFirstChild("Sidebar")
-				local Header = Canvas:FindFirstChild("Header")
-				local Pages = Canvas:FindFirstChild("Pages")
-				local Footer = Canvas:FindFirstChild("Footer")
-				if Sidebar then
-					Sidebar.Size = UD2(0, SidebarW, 1, 0)
-				end
-				if Header then
-					Header.Position = UFO(SidebarW, 0)
-					Header.Size = UD2(1, -SidebarW, 0, 50)
-				end
-				if Pages then
-					Pages.Position = UFO(SidebarW, 50)
-					Pages.Size = UD2(1, -SidebarW, 1, -75)
-				end
-				if Footer then
-					Footer.Position = UD2(0, SidebarW, 1, 0)
-					Footer.Size = UD2(1, -SidebarW, 0, 25)
-				end
-				-- show/hide page name labels
-				for _, Page in Window.Pages or {} do
-					if Page.Label then
-						Page.Label.Visible = Style == "IconText"
-					end
-					if Page.Button then
-						local TabH = Style == "IconText" and 36 or 45
-						local TabW = Style == "IconText" and (SidebarW - 16) or 45
-						Page.Button.Size = UFO(TabW, TabH)
-					end
-				end
-			end
-			Library.Notify({
-				Title = "Tab style";
-				Text = Style == "IconText" and "Icon + text" or "Icon only";
-				Type = "Info";
-				Duration = 2;
-			})
+			Library.SetScale(Value / 100)
 		end;
 	})
 
@@ -6239,40 +6187,12 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 		end
 	end)
 
-	MenuSection:Slider({
-		Name = "UI scale";
-		Suffix = "%";
-		Value = math.floor((Library.UIScale or 1) * 100);
-		Min = 75;
-		Max = 125;
-		Increment = 5;
-		Flag = "UIScale";
-		Callback = function(Value)
-			Library.SetScale(Value / 100)
-		end;
-	})
-	local WM = MenuSection:Label({ Text = "Watermark" })
-	WM:Toggle({
-		State = Library.Watermark and Library.Watermark.Enabled;
-		Flag = "WatermarkEnabled";
-		Callback = function(State)
-			Library.SetWatermark(nil, State)
-		end;
-	})
-	local KBL = MenuSection:Label({ Text = "Keybind list" })
-	KBL:Toggle({
-		State = Library.KeybindList and Library.KeybindList.Enabled;
-		Flag = "KeybindListEnabled";
-		Callback = function(State)
-			Library.SetKeybindList(State)
-		end;
-	})
 	MenuSection:Button({
 		Name = "Hide menu";
 		Width = 0.5;
 		Callback = function()
 			Library.ToggleMenu(false)
-			Library.Notify({ Title = "Noctro"; Text = "Menu hidden - press menu key"; Duration = 2 })
+			Library.Notify({ Title = "Noctro"; Text = "Menu hidden — press menu key"; Duration = 2 })
 		end;
 	})
 	MenuSection:Button({
@@ -6291,10 +6211,109 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 		})
 	end
 
+	-- ── Overlays ──
+	local WM = OverlaySection:Label({ Text = "Watermark" })
+	WM:Toggle({
+		State = (Library.Watermark and Library.Watermark.Enabled) == true;
+		Flag = "WatermarkEnabled";
+		Callback = function(State)
+			Library.SetWatermark(nil, State == true)
+		end;
+	})
+	OverlaySection:Input({
+		Name = "Watermark text";
+		Value = (Library.Watermark and Library.Watermark.Text) or "";
+		Placeholder = "Text…";
+		Flag = "WatermarkText";
+		Callback = function(Text)
+			local On = Library.Flags["WatermarkEnabled"]
+			local Enabled = On and On.Value == true
+			Library.SetWatermark(Text ~= "" and Text or "Noctro", Enabled)
+		end;
+	})
+	local KBL = OverlaySection:Label({ Text = "Keybind list" })
+	KBL:Toggle({
+		State = (Library.KeybindList and Library.KeybindList.Enabled) == true;
+		Flag = "KeybindListEnabled";
+		Callback = function(State)
+			Library.SetKeybindList(State == true)
+		end;
+	})
+
+	-- ── Layout ──
+	local DragLock = LayoutSection:Label({ Text = "Section drag" })
+	DragLock:Toggle({
+		State = Library.SectionDragEnabled == true;
+		Flag = "SectionDragEnabled";
+		Callback = function(State)
+			Library.SectionDragEnabled = State == true
+		end;
+	})
+	local TabEdit = LayoutSection:Label({ Text = "Tab reorder" })
+	TabEdit:Toggle({
+		State = Window.TabEditMode == true;
+		Flag = "TabEditMode";
+		Callback = function(State)
+			Window.TabEditMode = State == true
+			if Window.TabEditButton and Window.TabEditButton.Set then
+				pcall(Window.TabEditButton.Set, State == true)
+			elseif Window._SetTabEditMode then
+				pcall(Window._SetTabEditMode, State == true)
+			end
+		end;
+	})
+	LayoutSection:Dropdown({
+		Name = "Tab style";
+		Options = { "Icon", "IconText" };
+		Value = Window.TabStyle or "Icon";
+		Flag = "TabStyle";
+		Callback = function(Value)
+			local Style = Value == "IconText" and "IconText" or "Icon"
+			Window.TabStyle = Style
+			local SidebarW = Style == "IconText" and 118 or 75
+			Window.SidebarWidth = SidebarW
+			local Canvas = Window.Canvas
+			if Canvas then
+				local Sidebar = Canvas:FindFirstChild("Sidebar")
+				local Header = Canvas:FindFirstChild("Header")
+				local PagesF = Canvas:FindFirstChild("Pages")
+				local Footer = Canvas:FindFirstChild("Footer")
+				if Sidebar then Sidebar.Size = UD2(0, SidebarW, 1, 0) end
+				if Header then
+					Header.Position = UFO(SidebarW, 0)
+					Header.Size = UD2(1, -SidebarW, 0, 50)
+				end
+				if PagesF then
+					PagesF.Position = UFO(SidebarW, 50)
+					PagesF.Size = UD2(1, -SidebarW, 1, -75)
+				end
+				if Footer then
+					Footer.Position = UD2(0, SidebarW, 1, 0)
+					Footer.Size = UD2(1, -SidebarW, 0, 25)
+				end
+				for _, Pg in Window.Pages or {} do
+					if Pg.Label then Pg.Label.Visible = Style == "IconText" end
+					if Pg.Button then
+						Pg.Button.Size = UFO(
+							Style == "IconText" and (SidebarW - 16) or 45,
+							Style == "IconText" and 36 or 45
+						)
+					end
+				end
+			end
+		end;
+	})
+	LayoutSection:Paragraph({
+		Title = "Tip";
+		Body = "Section drag & tab reorder are <b>off</b> by default.";
+		RichText = true;
+	})
+
+	-- ── Notifications ──
 	NotifySection:Dropdown({
 		Name = "Position";
 		Options = { "Top Left", "Top Right", "Bottom Left", "Bottom Right" };
-		Value = Library.NotifyPosition;
+		Value = Library.NotifyPosition or "Top Right";
 		Flag = "NotifyPosition";
 		Callback = function(Value)
 			Library.NotifyPosition = Value
@@ -6305,7 +6324,7 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 		State = Library.NotifyToggles ~= false;
 		Flag = "NotifyToggles";
 		Callback = function(State)
-			Library.NotifyToggles = State
+			Library.NotifyToggles = State == true
 		end;
 	})
 	NotifySection:Slider({
@@ -6323,7 +6342,7 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 		Name = "Test notification";
 		Width = 0.5;
 		Callback = function()
-			Library.Notify({ Title = "Noctro"; Text = "This is a test notification"; Type = "Success" })
+			Library.Notify({ Title = "Noctro"; Text = "This is a test notification"; Type = "Success"; Duration = 3 })
 		end;
 	})
 	NotifySection:Button({
@@ -6337,9 +6356,25 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 	})
 	NotifySection:Button({
 		Name = "Open history";
+		Width = 0.5;
 		Callback = function()
 			if Window.OpenNotifyHistory then
 				Window.OpenNotifyHistory(true)
+			end
+		end;
+	})
+	NotifySection:Button({
+		Name = "Clear history";
+		Width = 0.5;
+		Callback = function()
+			if Library.NotifyHistory then
+				table.clear(Library.NotifyHistory)
+			end
+			if Window.RefreshNotifyHistory then
+				Window.RefreshNotifyHistory()
+			end
+			if Library.ClearNotifications then
+				Library.ClearNotifications()
 			end
 		end;
 	})
