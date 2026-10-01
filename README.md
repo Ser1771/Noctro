@@ -1,337 +1,478 @@
-# Noctro
+# Noctro API Reference
 
-Roblox Luau UI library for executor scripts — windows, pages, sections, flags, themes, configs, and overlays.
-
-**Current version:** `1.2.2`
-
----
-
-## Quick start
+**Version:** 1.2.2  
+**File:** `Files/Library.lua`
 
 ```lua
-local Noctro = loadstring(game:HttpGet("https://raw.githubusercontent.com/Ser1771/Noctro/refs/heads/main/Library.lua"))()
-
-Noctro.SetConfigFolder("MyScript")
-
--- Optional key system — omit entirely if you don't need it
--- Noctro:KeySystem({ ... })
-
-Noctro:LoadingScreen({ Title = "MyScript"; Subtitle = "Loading…"; Duration = 1 })
-
-Noctro.SetWatermark("MyScript", true)
-Noctro.SetKeybindList(true)
-
--- Floating show/hide button (optional)
-Noctro:UiButton({ Icon = "menu"; Draggable = true })
-
-local Window = Noctro:Window({
-	Title = "MyScript";
-	Footer = ".gg/example";
-	TabStyle = "IconText"; -- or "Icon"
-})
-
-local Combat = Window:Page({ Icon = "swords"; Name = "Combat" })
-local Aimbot = Combat:SubPage({ Name = "Aimbot" })
-local Main = Aimbot:Section({ Name = "Main"; Side = "Left"; Icon = "crosshair" })
-
-local Enable = Main:Label({ Text = "Enable" })
-Enable:Toggle({ State = false; Flag = "AimbotEnabled"; Callback = function(On) end })
-Enable:Keybind({ Key = Enum.KeyCode.E; Type = "Toggle"; Flag = "AimbotKey"; Callback = function() end })
-
-Main:Slider({ Name = "FOV"; Value = 90; Min = 1; Max = 180; Flag = "AimbotFOV"; Callback = function() end })
-
-Noctro:BuildConfigPage(Window)
-Noctro.Notify({ Title = "Ready"; Text = "Loaded"; Type = "Success"; Duration = 3 })
+local Library = loadstring(game:HttpGet("…/Library.lua"))()
 ```
 
 ---
 
-## Structure
+## Library
 
+### Properties
+
+| Name | Type | Default |
+|------|------|---------|
+| `Flags` | `{ [string]: { Value, Set, … } }` | `{}` |
+| `Theme` | theme table | see Theme |
+| `DefaultTheme` | theme table | defaults |
+| `SectionDragEnabled` | `boolean` | `true` |
+| `MenuKey` | `Enum.KeyCode` | `LeftAlt` |
+| `MenuOpen` | `boolean` | `true` |
+| `UIScale` | `number` | `1` |
+| `Folder` | `string` | `"Noctro"` |
+| `ConfigExtension` | `string` | `".json"` |
+| `Autoload` | `string?` | `nil` |
+| `NotifyPosition` | `string` | `"Top Right"` |
+| `MaxNotifications` | `number` | `4` |
+| `NotifyToggles` | `boolean` | `true` |
+| `NotifyHistory` | `{ … }` | `{}` |
+| `MaxNotifyHistory` | `number` | `40` |
+| `Windows` | `{ Window }` | `{}` |
+
+### Methods
+
+```lua
+Library:Window(props) -> Window
+Library:KeySystem(props)
+Library:LoadingScreen(props)
+Library:BuildConfigPage(Window)
+Library:UiButton(props) -> UiButton
+
+Library.Notify(props) -> { Dismiss }
+Library.ClearNotifications()
+Library.SetWatermark(text?, enabled?)
+Library.SetKeybindList(enabled?)
+Library.UpdateKeybindList(name, keyText, active?, mode?)
+Library.ToggleMenu(state?)
+Library.Unload()
+Library.SetScale(scale)
+Library.SetConfigFolder(path)
+Library.SaveConfig(name)
+Library.LoadConfig(name)
+Library.DeleteConfig(name)
+Library.ListConfigs() -> { string }
+Library.SetAutoload(name?)
+Library.GetAutoload() -> string?
+Library.GetConfig() -> table
+Library.LoadConfigData(data)
+Library.SetFlag(flag, value, transparency?)
+Library.RegisterFlag(flag, entry)
+Library.GetLayout()
+Library.SaveLayout()
+Library.ApplyLayout(layout)
+Library.ApplyTheme()
+Library.ThemeLink(object, property, key, key2?)
+Library.SignOut()
+Library.FormatExpiry(expiresAt) -> string
+Library.GetKeyExpiryText() -> string
+Library.Track(connection) -> connection?
+Library.Connect(signal, fn) -> connection
+Library.DisconnectAll()
 ```
-Library
- └─ Window
-     └─ Page          (sidebar tab)
-         └─ SubPage   (header tabs)
-             └─ Section (Left / Right column)
-                 └─ elements…
+
+---
+
+## Library:Window
+
+```lua
+Library:Window({
+	Title = "",
+	Footer = "",
+	Logo = nil,
+	Icon = nil,
+	TabStyle = "Icon" -- "Icon" | "IconText"
+})
 ```
 
-| Level | API |
-|-------|-----|
-| Window | `Library:Window({ Title, Footer, TabStyle, Icon })` |
-| Page | `Window:Page({ Icon, Name })` |
-| SubPage | `Page:SubPage({ Name })` |
-| Section | `SubPage:Section({ Name, Side, Icon, Collapsible, Collapsed, Drag })` |
+| Member | |
+|--------|--|
+| `Window:Page(props) -> Page` | |
+| `Window.SetLogo(icon)` | |
+| `Window.Canvas` | Frame |
+| `Window.Pages` | `{ Page }` |
+| `Window.TabStyle` | |
+| `Window.TabEditMode` | |
+| `Window.SidebarWidth` | |
+| `Window.OpenNotifyHistory(state?)` | |
+| `Window.RefreshNotifyHistory()` | |
 
-**TabStyle**
+---
 
-- `"Icon"` — compact icon-only sidebar (default)
-- `"IconText"` — wider sidebar; uses `Page.Name` as label
+## Page
+
+```lua
+Window:Page({ Icon = "box", Name = "" })
+```
+
+| Member | |
+|--------|--|
+| `Page:SubPage(props) -> SubPage` | |
+| `Page.Open()` / `Page.Close()` | |
+| `Page.SubPages` | |
+| `Page.ActiveSubPage` | |
+| `Page.Button` / `Page.IconLabel` / `Page.Label` | |
+
+---
+
+## SubPage
+
+```lua
+Page:SubPage({ Name = "" })
+```
+
+| Member | |
+|--------|--|
+| `SubPage:Section(props) -> Section` | |
+| `SubPage.Open()` / `SubPage.Close()` | |
+
+---
+
+## Section
+
+```lua
+SubPage:Section({
+	Name = "",
+	Icon = "box",
+	Side = "Left",
+	Collapsible = false,
+	Collapsed = false,
+	Drag = true
+})
+```
+
+| Member | |
+|--------|--|
+| `Section:Label` `Slider` `Dropdown` `Input` `Button` `Paragraph` `Divider` `Spacer` `Card` | |
+| `Section.SetCollapsed(state?)` | |
+| `Section.Content` `Section.Frame` `Section.Side` | |
+
+`Library.SectionDragEnabled = false` — lock all section drag.
 
 ---
 
 ## Elements
 
-Created on a **Section** (or Label for sub-elements):
-
-| Method | Main props |
-|--------|------------|
-| `:Label` | `Text`, `RichText` → then `:Toggle` / `:Keybind` / `:Colorpicker` |
-| `:Toggle` | `State`, `Flag`, `Disabled`, `Callback` |
-| `:Slider` | `Name`, `Value`, `Min`, `Max`, `Increment`, `Suffix`, `Flag`, `Disabled` |
-| `:Dropdown` | `Name`, `Options`, `Value`, `Multi`, `Search`, `MaxHeight`, `Flag`, `Disabled` |
-| `:Input` | `Name`, `Value`, `Placeholder`, `Flag` |
-| `:Button` | `Name`, `Callback`, `Width` (0.2–1), `Height`, `Disabled` |
-| `:Paragraph` | `Title`, `Body`, `RichText` |
-| `:Divider` | `Text?`, `Height` |
-| `:Spacer` | `Height` |
-| `:Card` | see [Card](#card) below |
-
-### Label sub-elements
+### Label
 
 ```lua
-local Row = Section:Label({ Text = "Aimbot" })
-Row:Toggle({ State = false; Flag = "AimbotEnabled"; Callback = function(On) end })
-Row:Keybind({ Key = Enum.KeyCode.E; Type = "Hold"; Flag = "AimbotKey"; Callback = function() end })
-Row:Colorpicker({ Color = Color3.fromRGB(255, 80, 80); Flag = "AimbotColor"; Callback = function() end })
+Section:Label({ Text = "", RichText = true })
 ```
 
-### Dropdown extras
+`Label:Toggle` · `Label:Keybind` · `Label:Colorpicker` · `Label.SetText(text)` · `LeftContent` · `RightContent`
 
-- Compact list scrolls with `MaxHeight` (default `180`)
-- **Maximize** button → centered modal; Multi gets **Select all / Deselect all**
-- Empty list shows “No options”
+### Toggle
+
+```lua
+Label:Toggle({
+	State = false,
+	Flag = nil,
+	Disabled = false,
+	Callback = function(state) end
+})
+```
+
+`Toggle.Set(state?, silent?)` · `Toggle.SetDisabled(state)`
+
+### Keybind
+
+```lua
+Label:Keybind({
+	Title = "",
+	Key = Enum.KeyCode.E,
+	Type = "Toggle", -- "Toggle" | "Hold"
+	Flag = nil,
+	Callback = function() end
+})
+```
+
+`Keybind.Set(key)` · `Keybind.SetType(type)` · `Keybind.Open(state?)` · `Keybind.Close()`
+
+### Colorpicker
+
+```lua
+Label:Colorpicker({
+	Title = "",
+	Color = Color3.new(1, 1, 1),
+	Transparency = 0,
+	Flag = nil,
+	Callback = function(color, transparency) end
+})
+```
+
+`Colorpicker.Set(color?, transparency?)` · `Colorpicker.Toggle(state?)` · `Colorpicker.Close()`
+
+### Slider
+
+```lua
+Section:Slider({
+	Name = "",
+	Value = 0,
+	Min = 0,
+	Max = 1,
+	Increment = 0.1,
+	Suffix = "",
+	Flag = nil,
+	Disabled = false,
+	Callback = function(value) end
+})
+```
+
+`Slider.Set(value)` · `Slider.SetDisabled(state)`
+
+### Dropdown
 
 ```lua
 Section:Dropdown({
-	Name = "ESP";
-	Multi = true;
-	Options = { "Box", "Name", "Health" };
-	Value = { "Box" };
-	Search = true;
-	Flag = "ESPModes";
-	Callback = function(V) end;
+	Name = "",
+	Options = {},
+	Value = "" , -- or {} if Multi
+	Multi = false,
+	Search = false,
+	MaxHeight = 180,
+	Flag = nil,
+	Disabled = false,
+	Callback = function(value) end
 })
+```
+
+`Dropdown.Set(value)` · `Dropdown.UpdateOptions(options)` · `Dropdown.Open(state?)` · `Dropdown.OpenExpand(state?)` · `Dropdown.Close()` · `Dropdown.SetDisabled(state)`
+
+### Input
+
+```lua
+Section:Input({
+	Name = "",
+	Value = "",
+	Placeholder = "",
+	Flag = nil,
+	Callback = function(text) end
+})
+```
+
+`Input.Set(value)`
+
+### Button
+
+```lua
+Section:Button({
+	Name = "Button",
+	Callback = function() end,
+	Height = 30,
+	Width = 1,
+	Disabled = false,
+	RichText = false
+})
+```
+
+`Button.SetText(text)` · `Button.SetDisabled(state)`
+
+### Paragraph
+
+```lua
+Section:Paragraph({ Title = "", Body = "", RichText = true })
+```
+
+`Paragraph.SetTitle(text)` · `Paragraph.SetBody(text)`
+
+### Divider
+
+```lua
+Section:Divider({ Text = "", Height = 12 })
+```
+
+### Spacer
+
+```lua
+Section:Spacer({ Height = 10 })
 ```
 
 ### Card
 
 ```lua
 Section:Card({
-	Title = "Premium";
-	Subtitle = "Optional";
-	Icon = "star";
-	Badge = "NEW";
-	Body = "Supports <b>RichText</b>";
-	Background = "SurfaceAlt"; -- or Color3
+	Title = "",
+	Subtitle = "",
+	Icon = nil,
+	Body = "",
+	Image = nil,
+	ImageHeight = 80,
+	Background = nil,
+	BackgroundTransparency = 0,
+	Stroke = true,
+	StrokeColor = nil,
+	Corner = 8,
+	Padding = 12,
+	Width = 1,
+	OnClick = nil,
 	Buttons = {
-		{ Name = "Get key"; Style = "Accent"; Callback = function() end },
-		{ Name = "Later"; Style = "Ghost"; Callback = function() end },
-	};
+		{ Name = "", Style = "Surface", Callback = function() end }
+	},
+	Badge = nil,
+	Gradient = nil,
+	RichText = true
 })
-
--- Styles: Accent | Surface | Ghost | Danger
--- Runtime: SetTitle, SetBody, SetBackground, AddButton, SetBadge, Content (Frame)
 ```
 
-### Sections
+Button `Style`: `"Accent"` | `"Surface"` | `"Ghost"` | `"Danger"`
 
-```lua
-Section({
-	Name = "Main";
-	Side = "Left"; -- or "Right"
-	Icon = "crosshair";
-	Collapsible = true;
-	Collapsed = false;
-	Drag = true; -- false = never reorder this section
-})
-
-Section:SetCollapsed(true)
-```
-
-```lua
-Library.SectionDragEnabled = false -- lock all section reordering
-```
+`SetTitle` · `SetSubtitle` · `SetBody` · `SetBackground(bg, transparency?)` · `SetImage(image, height?)` · `AddButton(def)` · `ClearButtons()` · `SetBadge(text?)` · `SetVisible(bool)` · `Content` · `Frame` · `Inner`
 
 ---
 
 ## Flags
 
-Flags store values and drive **config save/load**.
-
 ```lua
--- Attach
-Toggle({ Flag = "AimbotEnabled"; State = false; Callback = function(On) end })
-
--- Read
-local On = Library.Flags["AimbotEnabled"].Value
-
--- Safe read
-local Entry = Library.Flags["AimbotEnabled"]
-if Entry and Entry.Value then
-	-- ...
-end
-
--- Write (updates UI when Set is registered)
+Library.Flags["AimbotEnabled"].Value
 Library.SetFlag("AimbotEnabled", true)
-Library.SetFlag("AimbotFOV", 120)
 ```
 
-| Control | `.Value` type |
-|---------|----------------|
+| Control | `.Value` |
+|---------|----------|
 | Toggle | `boolean` |
 | Slider | `number` |
 | Dropdown | `string` |
-| Multi dropdown | `{ string }` |
+| Multi | `{ string }` |
 | Input | `string` |
-| Keybind / Colorpicker | see flag entry |
-
-Use **unique, stable** flag names. Renaming a flag drops old config data for that key.
 
 ---
 
-## Configs
+## Config
 
 ```lua
 Library.SetConfigFolder("MyScript")
-
 Library.SaveConfig("default")
 Library.LoadConfig("default")
 Library.DeleteConfig("default")
-Library.ListConfigs()           -- { "default", ... }
+Library.ListConfigs()
 Library.SetAutoload("default")
 Library.GetAutoload()
-
-Library.GetConfig()             -- snapshot table
+Library.GetConfig()
 Library.LoadConfigData(data)
-
-Library:BuildConfigPage(Window) -- built-in Configs / Theme / Menu UI
+Library:BuildConfigPage(Window)
 ```
-
-Requires executor FS (`writefile` / `readfile` / `isfolder` / `makefolder`).
 
 ---
 
-## Notifications
+## Notify
 
 ```lua
 Library.Notify({
-	Title = "Saved";
-	Text = "Config <b>default</b> written";
-	Type = "Success"; -- Info | Success | Warning | Error
-	Duration = 3;
-	RichText = true;
-	Action = { Text = "OK"; Callback = function() end };
+	Title = "Notification",
+	Text = "",
+	Type = "Info",
+	Duration = 4,
+	Icon = nil,
+	RichText = true,
+	Action = { Text = "OK", Callback = function() end }
 })
 
 Library.ClearNotifications()
-Library.NotifyPosition = "Top Right" -- Top/Bottom × Left/Right
+Library.NotifyPosition = "Top Right"
 Library.MaxNotifications = 4
-Library.NotifyToggles = true         -- toast when toggles flip
+Library.NotifyToggles = true
 ```
 
-**History:** bell button next to the window search bar opens a history panel (Clear all included).
+`Window.OpenNotifyHistory(state?)` · `Library.NotifyHistory`
 
 ---
 
-## Overlays & menu
+## Overlays / menu
 
 ```lua
-Library.SetWatermark("MyScript", true)
-Library.SetKeybindList(true)
+Library.SetWatermark(text?, enabled?)
+Library.SetKeybindList(enabled?)
+Library.UpdateKeybindList(name, keyText, active?, mode?)
 Library.MenuKey = Enum.KeyCode.LeftAlt
-Library.ToggleMenu()           -- or ToggleMenu(true/false)
-Library.SetScale(1.0)          -- 0.75–1.25
-
-Library:UiButton({
-	Icon = "menu";
-	Text = nil;
-	Size = 44;
-	Draggable = true;
-	Callback = function(open) end;
-})
-
-Library.Unload()               -- destroy UI + disconnect tracked connections
+Library.ToggleMenu(state?)
+Library.SetScale(1)
+Library.Unload()
 ```
+
+### UiButton
+
+```lua
+Library:UiButton({
+	Icon = "menu",
+	Text = nil,
+	Size = 44,
+	Position = nil,
+	Draggable = true,
+	Callback = function(open) end
+})
+```
+
+`SetVisible` · `SetIcon` · `SetText` · `Sync` · `Destroy`
 
 ---
 
 ## Theme
 
 ```lua
-Library.Theme.Accent = Color3.fromRGB(138, 156, 229)
-Library.Theme.AccentDark = Color3.fromRGB(78, 88, 129)
-Library.Theme.Background = Color3.fromRGB(9, 8, 8)
-Library.Theme.Surface = Color3.fromRGB(15, 14, 15)
-Library.Theme.SurfaceAlt = Color3.fromRGB(20, 20, 21)
-Library.Theme.Border = Color3.fromRGB(36, 37, 37)
-Library.Theme.Text = Color3.fromRGB(255, 255, 255)
+Library.Theme = {
+	Accent = Color3.fromRGB(138, 156, 229),
+	AccentDark = Color3.fromRGB(78, 88, 129),
+	Background = Color3.fromRGB(9, 8, 8),
+	Surface = Color3.fromRGB(15, 14, 15),
+	SurfaceAlt = Color3.fromRGB(20, 20, 21),
+	Border = Color3.fromRGB(36, 37, 37),
+	SectionBorder = Color3.fromRGB(32, 33, 36),
+	Text = Color3.fromRGB(255, 255, 255),
+	TextDim = Color3.fromRGB(180, 184, 200),
+}
 Library.ApplyTheme()
+Library.ThemeLink(instance, property, key, key2?)
 ```
-
-Live links use `Library.ThemeLink(instance, property, key)`.
 
 ---
 
-## Optional key system
+## KeySystem
 
 ```lua
 Library:KeySystem({
-	Title = "Login";
-	Placeholder = "License key";
-	ButtonText = "Sign in";
-	Remember = true;
-	ShowExpiry = true;
-	GetKey = "discord.gg/example";
+	Title = "Login",
+	Placeholder = "License key",
+	ButtonText = "Sign in",
+	Remember = true,
+	ShowExpiry = true,
+	WatermarkExpiry = true,
+	GetKey = "",
 	Validate = function(key, finish)
-		if key == "secret" then
-			return true, os.time() + 7 * 86400 -- success + expiry
-		end
-		return false, nil, "Invalid key"
-	end;
+		return true, os.time() + 86400, nil
+		-- or finish(success, expiresAt?, error?)
+	end
+})
+
+Library.SignOut()
+Library.FormatExpiry(expiresAt)
+Library.GetKeyExpiryText()
+Library.Auth
+```
+
+---
+
+## LoadingScreen
+
+```lua
+Library:LoadingScreen({
+	Title = "",
+	Subtitle = "",
+	Duration = 1.25
 })
 ```
 
-Omit the whole block if you don’t need a lock screen.
-
 ---
 
-## Library API summary
+## Hierarchy
 
-| API | Purpose |
-|-----|---------|
-| `:Window` | Main window |
-| `:KeySystem` | Optional login |
-| `:LoadingScreen` | Splash |
-| `:BuildConfigPage` | Config / theme / menu page |
-| `:UiButton` | Floating menu toggle |
-| `Notify` | Toast |
-| `ClearNotifications` | Dismiss toasts |
-| `SetWatermark` / `SetKeybindList` | Overlays |
-| `SetScale` | UI scale |
-| `ToggleMenu` / `Unload` | Visibility / cleanup |
-| `SaveConfig` / `LoadConfig` / … | Persistence |
-| `SetFlag` / `Flags` | State |
-| `SectionDragEnabled` | Global section reorder lock |
-| `Track` / `Connect` / `DisconnectAll` | Connection hygiene |
-
----
-
-## Example
-
-See `Files/Example.lua` for a full Lumen-style layout, including:
-
-- IconText tabs  
-- Multi dropdown + modal expand  
-- Settings → **Library** (section drag lock, scale, overlays, notify options)  
-- Settings → **General** (control showcase)  
-- Cards, dividers, collapsible sections  
-
----
-
-## Notes
-
-- Designed for **executor** environments (filesystem + `CoreGui` / `PlayerGui` fallback).
-- Icons resolve via built-in Lucide-style name map (`"swords"`, `"settings"`, …) or `rbxassetid://…`.
-- Public API is additive across 1.x versions; prefer new flags/props over breaking renames.
+```
+Library:Window
+  → Window:Page
+    → Page:SubPage
+      → SubPage:Section
+        → :Label → :Toggle | :Keybind | :Colorpicker
+        → :Slider | :Dropdown | :Input | :Button
+        → :Paragraph | :Divider | :Spacer | :Card
+```
