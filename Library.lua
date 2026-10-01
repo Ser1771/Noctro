@@ -1,7 +1,7 @@
---@ version: 1.2.2
+--@ version: 1.2.3
 --@ library: Noctro
---@ updated: 2026-09-30
---@ changes: Fix section chevron + card badge positions; Example Settings showcase
+--@ updated: 2026-10-01
+--@ changes: OnUnload callback; BuildConfigPage — section drag lock, tab style, more menu controls
 
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
@@ -5589,7 +5589,35 @@ Library.Notify = function(propertyTable: {})
 	return { Dismiss = Dismiss }
 end
 
+--[[
+	Unload hook — runs before UI is destroyed.
+
+	Library.OnUnload = function()
+		-- your cleanup
+	end
+
+	-- or register multiple:
+	Library.AddUnloadCallback(function() end)
+]]
+Library.OnUnload = nil :: (() -> ())?
+Library._UnloadCallbacks = {} :: { () -> () }
+
+Library.AddUnloadCallback = function(fn: () -> ())
+	if type(fn) == "function" then
+		TIS(Library._UnloadCallbacks, fn)
+	end
+end
+
 Library.Unload = function()
+	-- User callbacks first (while UI / flags still exist)
+	if type(Library.OnUnload) == "function" then
+		pcall(Library.OnUnload)
+	end
+	for _, Fn in Library._UnloadCallbacks do
+		pcall(Fn)
+	end
+	table.clear(Library._UnloadCallbacks)
+
 	Library.ToggleMenu(false)
 	-- Stop tracked signals (drags, watermark stats, menu key, etc.)
 	if Library.DisconnectAll then
@@ -6114,6 +6142,84 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 		end;
 	})
 
+	-- Layout / behavior
+	local DragLock = MenuSection:Label({ Text = "Section drag" })
+	DragLock:Toggle({
+		State = Library.SectionDragEnabled ~= false;
+		Flag = "SectionDragEnabled";
+		Callback = function(State)
+			Library.SectionDragEnabled = State == true
+		end;
+	})
+
+	local TabEdit = MenuSection:Label({ Text = "Tab reorder" })
+	TabEdit:Toggle({
+		State = Window.TabEditMode == true;
+		Flag = "TabEditMode";
+		Callback = function(State)
+			Window.TabEditMode = State == true
+			-- sync small sidebar lock switch if present
+			if Window.TabEditButton and Window.TabEditButton.Set then
+				pcall(Window.TabEditButton.Set, State == true)
+			elseif Window._SetTabEditMode then
+				pcall(Window._SetTabEditMode, State == true)
+			end
+		end;
+	})
+
+	MenuSection:Dropdown({
+		Name = "Tab style";
+		Options = { "Icon", "IconText" };
+		Value = Window.TabStyle or "Icon";
+		Flag = "TabStyle";
+		Callback = function(Value)
+			local Style = Value == "IconText" and "IconText" or "Icon"
+			Window.TabStyle = Style
+			local SidebarW = Style == "IconText" and 118 or 75
+			Window.SidebarWidth = SidebarW
+			-- Best-effort live resize of this window chrome
+			local Canvas = Window.Canvas
+			if Canvas then
+				local Sidebar = Canvas:FindFirstChild("Sidebar")
+				local Header = Canvas:FindFirstChild("Header")
+				local Pages = Canvas:FindFirstChild("Pages")
+				local Footer = Canvas:FindFirstChild("Footer")
+				if Sidebar then
+					Sidebar.Size = UD2(0, SidebarW, 1, 0)
+				end
+				if Header then
+					Header.Position = UFO(SidebarW, 0)
+					Header.Size = UD2(1, -SidebarW, 0, 50)
+				end
+				if Pages then
+					Pages.Position = UFO(SidebarW, 50)
+					Pages.Size = UD2(1, -SidebarW, 1, -75)
+				end
+				if Footer then
+					Footer.Position = UD2(0, SidebarW, 1, 0)
+					Footer.Size = UD2(1, -SidebarW, 0, 25)
+				end
+				-- show/hide page name labels
+				for _, Page in Window.Pages or {} do
+					if Page.Label then
+						Page.Label.Visible = Style == "IconText"
+					end
+					if Page.Button then
+						local TabH = Style == "IconText" and 36 or 45
+						local TabW = Style == "IconText" and (SidebarW - 16) or 45
+						Page.Button.Size = UFO(TabW, TabH)
+					end
+				end
+			end
+			Library.Notify({
+				Title = "Tab style";
+				Text = Style == "IconText" and "Icon + text" or "Icon only";
+				Type = "Info";
+				Duration = 2;
+			})
+		end;
+	})
+
 	local MenuKeyLabel = MenuSection:Label({ Text = "Menu key" })
 	MenuKeyLabel:Keybind({
 		Title = "Menu";
@@ -6136,7 +6242,7 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 	MenuSection:Slider({
 		Name = "UI scale";
 		Suffix = "%";
-		Value = math.floor(Library.UIScale * 100);
+		Value = math.floor((Library.UIScale or 1) * 100);
 		Min = 75;
 		Max = 125;
 		Increment = 5;
@@ -6147,7 +6253,7 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 	})
 	local WM = MenuSection:Label({ Text = "Watermark" })
 	WM:Toggle({
-		State = Library.Watermark.Enabled;
+		State = Library.Watermark and Library.Watermark.Enabled;
 		Flag = "WatermarkEnabled";
 		Callback = function(State)
 			Library.SetWatermark(nil, State)
@@ -6155,7 +6261,7 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 	})
 	local KBL = MenuSection:Label({ Text = "Keybind list" })
 	KBL:Toggle({
-		State = Library.KeybindList.Enabled;
+		State = Library.KeybindList and Library.KeybindList.Enabled;
 		Flag = "KeybindListEnabled";
 		Callback = function(State)
 			Library.SetKeybindList(State)
@@ -6202,10 +6308,39 @@ Library.BuildConfigPage = function(self: Library, Window: any)
 			Library.NotifyToggles = State
 		end;
 	})
+	NotifySection:Slider({
+		Name = "Max toasts";
+		Value = Library.MaxNotifications or 4;
+		Min = 1;
+		Max = 8;
+		Increment = 1;
+		Flag = "MaxNotifications";
+		Callback = function(V)
+			Library.MaxNotifications = V
+		end;
+	})
 	NotifySection:Button({
 		Name = "Test notification";
+		Width = 0.5;
 		Callback = function()
 			Library.Notify({ Title = "Noctro"; Text = "This is a test notification"; Type = "Success" })
+		end;
+	})
+	NotifySection:Button({
+		Name = "Clear toasts";
+		Width = 0.5;
+		Callback = function()
+			if Library.ClearNotifications then
+				Library.ClearNotifications()
+			end
+		end;
+	})
+	NotifySection:Button({
+		Name = "Open history";
+		Callback = function()
+			if Window.OpenNotifyHistory then
+				Window.OpenNotifyHistory(true)
+			end
 		end;
 	})
 
