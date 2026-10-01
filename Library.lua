@@ -1,7 +1,7 @@
---@ version: 1.2.5
+--@ version: 1.2.6
 --@ library: Noctro
 --@ updated: 2026-10-01
---@ changes: BuildConfigPage Menu reorganized — scale, notify, layout, overlays complete
+--@ changes: Fix TabEditButton.Set error (empty Notifications); remove watermark text setting
 
 local CSK = ColorSequenceKeypoint.new
 local NSK = NumberSequenceKeypoint.new
@@ -3324,23 +3324,30 @@ Library.Window = function(self: Library, propertyTable: {})
 		Text = "";
 		ZIndex = 7;
 	})
-	EditHit.Activated:Connect(function()
-		Window.TabEditMode = not Window.TabEditMode
-		local On = Window.TabEditMode
+	Window.SetTabEditMode = function(On: boolean?, Notify: boolean?)
+		if On == nil then
+			On = not Window.TabEditMode
+		end
+		Window.TabEditMode = On == true
 		Tween(EditKnob, {
-			Position = On and UD2(1, -1, 0.5, 0) or UD2(0, 1, 0.5, 0);
-			AnchorPoint = On and V2(1, 0.5) or V2(0, 0.5);
-			BackgroundColor3 = On and Library.Theme.Accent or RGB(180, 184, 200);
+			Position = Window.TabEditMode and UD2(1, -1, 0.5, 0) or UD2(0, 1, 0.5, 0);
+			AnchorPoint = Window.TabEditMode and V2(1, 0.5) or V2(0, 0.5);
+			BackgroundColor3 = Window.TabEditMode and Library.Theme.Accent or RGB(180, 184, 200);
 		}, 0.12)
 		Tween(EditTrack, {
-			BackgroundColor3 = On and Library.Theme.AccentDark or Library.Theme.SurfaceAlt;
+			BackgroundColor3 = Window.TabEditMode and Library.Theme.AccentDark or Library.Theme.SurfaceAlt;
 		}, 0.12)
-		Library.Notify({
-			Title = "Tabs";
-			Text = On and "Drag tabs to rearrange" or "Tab order locked";
-			Type = "Info";
-			Duration = 1.5;
-		})
+		if Notify then
+			Library.Notify({
+				Title = "Tabs";
+				Text = Window.TabEditMode and "Drag tabs to rearrange" or "Tab order locked";
+				Type = "Info";
+				Duration = 1.5;
+			})
+		end
+	end
+	EditHit.Activated:Connect(function()
+		Window.SetTabEditMode(nil, true)
 	end)
 	Window.TabEditButton = EditHit
 	PageButtons.Size = UD2(1, 0, 1, -LogoH - 28)
