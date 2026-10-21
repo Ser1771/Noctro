@@ -1,21 +1,3 @@
---[[
-    ███████╗██╗   ██╗███████╗██████╗  ██████╗ ██████╗ ███████╗███████╗███╗   ██╗
-    Evergreen UI Library  -  macOS-inspired Roblox UI library
-    Title bar / traffic lights / sidebar / switches / segmented tabboxes / sheets
-    Layout & API follow Obsidian (two-column tabs, groupboxes, tabboxes, depboxes).
-
-    Quick start:
-        local Library = loadstring(readfile("Evergreen.lua"))()
-        local Window = Library:CreateWindow({ Title = "Evergreen", Subtitle = "v1.0", Footer = "Premium" })
-        Window:AddSection("General")
-        local Tab = Window:AddTab({ Name = "Main", Icon = "house", Description = "Core features" })
-        local Box = Tab:AddLeftGroupbox("Player", "user")
-        Box:AddToggle("Fly", { Text = "Fly", Default = false, Callback = function(v) end })
-            :AddKeyPicker("FlyKey", { Default = "F", Mode = "Toggle", Text = "Fly" })
-        Box:AddSlider("Speed", { Text = "Speed", Min = 16, Max = 200, Default = 16, Rounding = 0 })
-        Library:Notify({ Title = "Evergreen", Description = "Loaded!", Time = 4 })
-]]
-
 --// Services \\--
 local cloneref = cloneref or function(Instance_) return Instance_ end
 local function GetService(Name) return cloneref(game:GetService(Name)) end
