@@ -1,3 +1,21 @@
+--[[
+    ███████╗██╗   ██╗███████╗██████╗  ██████╗ ██████╗ ███████╗███████╗███╗   ██╗
+    Evergreen UI Library  -  macOS-inspired Roblox UI library
+    Title bar / traffic lights / sidebar / switches / segmented tabboxes / sheets
+    Layout & API follow Obsidian (two-column tabs, groupboxes, tabboxes, depboxes).
+
+    Quick start:
+        local Library = loadstring(readfile("Evergreen.lua"))()
+        local Window = Library:CreateWindow({ Title = "Evergreen", Subtitle = "v1.0", Footer = "Premium" })
+        Window:AddSection("General")
+        local Tab = Window:AddTab({ Name = "Main", Icon = "house", Description = "Core features" })
+        local Box = Tab:AddLeftGroupbox("Player", "user")
+        Box:AddToggle("Fly", { Text = "Fly", Default = false, Callback = function(v) end })
+            :AddKeyPicker("FlyKey", { Default = "F", Mode = "Toggle", Text = "Fly" })
+        Box:AddSlider("Speed", { Text = "Speed", Min = 16, Max = 200, Default = 16, Rounding = 0 })
+        Library:Notify({ Title = "Evergreen", Description = "Loaded!", Time = 4 })
+]]
+
 --// Services \\--
 local cloneref = cloneref or function(Instance_) return Instance_ end
 local function GetService(Name) return cloneref(game:GetService(Name)) end
@@ -28,6 +46,7 @@ local Themes = {
         Popup = Color3.fromRGB(50, 50, 54),
         Segment = Color3.fromRGB(96, 96, 102),
         Track = Color3.fromRGB(84, 84, 88),
+        SliderFill = Color3.fromRGB(248, 248, 250),
         Outline = Color3.fromRGB(70, 70, 75),
         Text = Color3.fromRGB(245, 245, 247),
         SubText = Color3.fromRGB(152, 152, 160),
@@ -46,6 +65,7 @@ local Themes = {
         Popup = Color3.fromRGB(40, 40, 44),
         Segment = Color3.fromRGB(84, 84, 90),
         Track = Color3.fromRGB(70, 70, 75),
+        SliderFill = Color3.fromRGB(248, 248, 250),
         Outline = Color3.fromRGB(56, 56, 61),
         Text = Color3.fromRGB(240, 240, 244),
         SubText = Color3.fromRGB(140, 140, 150),
@@ -64,6 +84,7 @@ local Themes = {
         Popup = Color3.fromRGB(255, 255, 255),
         Segment = Color3.fromRGB(255, 255, 255),
         Track = Color3.fromRGB(205, 205, 210),
+        SliderFill = Color3.fromRGB(40, 184, 78),
         Outline = Color3.fromRGB(210, 210, 215),
         Text = Color3.fromRGB(28, 28, 30),
         SubText = Color3.fromRGB(112, 112, 120),
@@ -274,7 +295,7 @@ local Templ = {
     Frame = { BorderSizePixel = 0 },
     ImageLabel = { BackgroundTransparency = 1, BorderSizePixel = 0 },
     ImageButton = { AutoButtonColor = false, BackgroundTransparency = 1, BorderSizePixel = 0 },
-    ScrollingFrame = { BorderSizePixel = 0, BackgroundTransparency = 1 },
+    ScrollingFrame = { BorderSizePixel = 0, BackgroundTransparency = 1, ScrollBarThickness = 0, ScrollBarImageTransparency = 1 },
     TextLabel = { BorderSizePixel = 0, BackgroundTransparency = 1, FontFace = "Font", RichText = true, TextColor3 = "Text", TextSize = 13 },
     TextButton = { AutoButtonColor = false, BorderSizePixel = 0, BackgroundTransparency = 1, FontFace = "Font", RichText = true, TextColor3 = "Text", TextSize = 13, Text = "" },
     TextBox = { BorderSizePixel = 0, BackgroundTransparency = 1, FontFace = "Font", TextColor3 = "Text", PlaceholderColor3 = "SubText", TextSize = 13, Text = "" },
@@ -340,6 +361,26 @@ local function List(Parent, Padding, Dir, HA, VA)
 end
 local function Flex(Parent) return New("UIFlexItem", { FlexMode = Enum.UIFlexMode.Fill, Parent = Parent }) end
 
+--// Gradients (re-evaluated whenever the theme changes) \--
+Library.Gradients = setmetatable({}, { __mode = "k" })
+local function Two(Key, TopAdd, BottomAdd)
+    return function()
+        local C = Library.Scheme[Key]
+        return ColorSequence.new(Lighten(C, TopAdd), Lighten(C, BottomAdd))
+    end
+end
+local function Grad(Inst, Fn, Rotation)
+    local G = New("UIGradient", { Rotation = Rotation or 90, Parent = Inst })
+    G.Color = Fn()
+    Library.Gradients[G] = Fn
+    return G
+end
+function Library:UpdateGradients()
+    for G, Fn in Library.Gradients do
+        pcall(function() G.Color = Fn() end)
+    end
+end
+
 function Library:UpdateColorsUsingRegistry()
     for Inst, Props in Library.Registry do
         for Prop, Key in Props do
@@ -354,6 +395,7 @@ function Library:SetTheme(Theme)
     if typeof(Theme) ~= "table" then return end
     for K, V in Theme do Library.Scheme[K] = V end
     Library:UpdateColorsUsingRegistry()
+    Library:UpdateGradients()
     for _, E in Toggles do if E.Display then E:Display(true) end end
     for _, E in Options do if E.Display then pcall(E.Display, E, true) end end
     for _, T in Library.TabList do T:RefreshStyle() end
@@ -686,8 +728,8 @@ local function Finalize(Group, Element, Holder, Store, Idx, Info)
     end
 end
 
-local function MakeRow(Group, Height)
-    local Row = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, Height or 22), Parent = Group.Container })
+local function MakeRow(Group, Height, AsButton)
+    local Row = New(AsButton and "TextButton" or "Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, Height or 22), Parent = Group.Container })
     List(Row, 8, Enum.FillDirection.Horizontal, nil, Enum.VerticalAlignment.Center)
     return Row
 end
@@ -910,10 +952,9 @@ function Funcs:AddToggle(Idx, Info)
         Risky = Info.Risky, Disabled = Info.Disabled, Visible = Info.Visible, Addons = {}, AnyKeyPickerPicking = false, Connections = {},
     }
 
-    local Row = MakeRow(Group, 22)
+    local Row = MakeRow(Group, 22, true)
     Row.Visible = Toggle.Visible
-    local Click = New("TextButton", { Size = UDim2.fromScale(1, 1), ZIndex = 0, Parent = Row })
-    Click.Active = true
+    local Click = Row
     local Label = New("TextLabel", { Size = UDim2.new(0, 0, 1, 0), Text = Toggle.Text, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Toggle.Risky and "Red" or "Text", LayoutOrder = 1, Parent = Row })
     Flex(Label)
     Toggle.AddonHolder = MakeAddonHolder(Row)
@@ -1095,14 +1136,16 @@ function Funcs:AddSlider(Idx, Info)
         AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0.4, 0, 1, 0),
         TextXAlignment = Enum.TextXAlignment.Right, TextColor3 = "SubText", ClearTextOnFocus = false, Text = "", Parent = Top,
     })
-    local Area = New("TextButton", { Size = UDim2.new(1, 0, 0, 18), Parent = Holder })
-    local Track = New("Frame", { BackgroundColor3 = "Track", AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 8, 0.5, 0), Size = UDim2.new(1, -16, 0, 4), Parent = Area })
+    local KS = 24 -- knob size
+    local Area = New("TextButton", { Size = UDim2.new(1, 0, 0, 28), Parent = Holder })
+    local Track = New("Frame", { BackgroundColor3 = "Track", BackgroundTransparency = 0.35, AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Size = UDim2.new(1, 0, 0, 20), Parent = Area })
     Corner(Track, 99)
-    local FillBar = New("Frame", { BackgroundColor3 = "Accent", Size = UDim2.fromScale(0.5, 1), Parent = Track })
+    Stroke(Track, "Outline", 1, 0.6)
+    local FillBar = New("Frame", { BackgroundColor3 = "SliderFill", Size = UDim2.fromScale(0.5, 1), Parent = Track })
     Corner(FillBar, 99)
-    local Knob = New("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(16, 16), Parent = Track })
+    local Knob = New("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(KS, KS), Parent = Track })
     Corner(Knob, 99)
-    Stroke(Knob, Color3.new(0, 0, 0), 1, 0.85)
+    Stroke(Knob, Color3.new(0, 0, 0), 1.5, 0.82)
 
     local function Format(V)
         local N = Slider.Rounding > 0 and string.format("%." .. Slider.Rounding .. "f", V) or tostring(V)
@@ -1112,13 +1155,13 @@ function Funcs:AddSlider(Idx, Info)
     function Slider:Display()
         if Library.Unloaded then return end
         local X = (Slider.Value - Slider.Min) / math.max(Slider.Max - Slider.Min, 1e-9)
-        FillBar.Size = UDim2.fromScale(X, 1)
-        Knob.Position = UDim2.fromScale(X, 0.5)
+        FillBar.Size = UDim2.new(X, (0.5 - X) * KS, 1, 0)
+        Knob.Position = UDim2.new(X, (0.5 - X) * KS, 0.5, 0)
         ValueBox.Text = Info.FormatDisplayValue and tostring(Info.FormatDisplayValue(Slider, Slider.Value)) or Format(Slider.Value)
         local D = Slider.Disabled and 0.55 or 0
         Label.TextTransparency, ValueBox.TextTransparency = D, D
-        FillBar.BackgroundColor3 = Slider.Disabled and Library.Scheme.Track or Library.Scheme.Accent
-        Bind(FillBar, "BackgroundColor3", Slider.Disabled and "Track" or "Accent")
+        FillBar.BackgroundColor3 = Slider.Disabled and Library.Scheme.Outline or Library.Scheme.SliderFill
+        Bind(FillBar, "BackgroundColor3", Slider.Disabled and "Outline" or "SliderFill")
     end
     function Slider:OnChanged(F) Slider.Changed = F end
     function Slider:RunChanged()
@@ -1152,7 +1195,7 @@ function Funcs:AddSlider(Idx, Info)
         if Slider.Disabled or not IsPress(Input) then return end
         SetSidesScrolling(false)
         while Input.UserInputState ~= Enum.UserInputState.End and not Slider.Destroyed do
-            local X = (Mouse.X - Track.AbsolutePosition.X) / math.max(Track.AbsoluteSize.X, 1)
+            local X = (Mouse.X - Track.AbsolutePosition.X - KS / 2) / math.max(Track.AbsoluteSize.X - KS, 1)
             local V = Round(Slider.Min + (Slider.Max - Slider.Min) * math.clamp(X, 0, 1), Slider.Rounding)
             if V ~= Slider.Value then
                 Slider.Value = V
@@ -1324,7 +1367,7 @@ function Funcs:AddDropdown(Idx, Info)
 
     Scroll = New("ScrollingFrame", {
         Position = UDim2.fromOffset(0, Info.Searchable and 34 or 0), Size = UDim2.new(1, 0, 1, Info.Searchable and -34 or 0),
-        CanvasSize = UDim2.new(), ScrollBarThickness = 2, ScrollBarImageColor3 = "Outline", Parent = Popup.Frame,
+        CanvasSize = UDim2.new(), ScrollBarThickness = 0, ScrollBarImageTransparency = 1, Parent = Popup.Frame,
     })
     List(Scroll, 1)
     Pad(Scroll, 4, 4, 4, 4)
@@ -2041,21 +2084,18 @@ function Library:CreateWindow(WindowInfo)
         BackgroundTransparency = 1, Size = WindowInfo.Size, Visible = false, Parent = ScreenGui,
         Position = WindowInfo.Center and UDim2.new(0.5, -WindowInfo.Size.X.Offset / 2, 0.5, -WindowInfo.Size.Y.Offset / 2) or WindowInfo.Position,
     })
-    New("ImageLabel", {
-        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 70, 1, 70),
-        Image = "rbxassetid://6014261993", ImageColor3 = Color3.new(0, 0, 0), ImageTransparency = 0.45,
-        ScaleType = Enum.ScaleType.Slice, SliceCenter = Rect.new(49, 49, 450, 450), ZIndex = 0, Parent = Root,
-    })
-    local Main = New("Frame", { BackgroundColor3 = "Window", Size = UDim2.fromScale(1, 1), ClipsDescendants = true, Parent = Root })
+    local Main = New("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), Size = UDim2.fromScale(1, 1), ClipsDescendants = true, Parent = Root })
     Corner(Main, WindowInfo.CornerRadius)
     Stroke(Main, "Outline", 1, 0.25)
+    Grad(Main, Two("Window", 0.05, -0.015), 125)
     local MainScale = New("UIScale", { Parent = Main })
 
     Window.Root, Window.MainFrame = Root, Main
 
     --// Title bar
-    local TitleBar = New("Frame", { BackgroundColor3 = "Titlebar", BackgroundTransparency = 0, Size = UDim2.new(1, 0, 0, TitleH), ZIndex = 3, Parent = Main })
+    local TitleBar = New("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0, Size = UDim2.new(1, 0, 0, TitleH), ZIndex = 3, Parent = Main })
     New("Frame", { BackgroundColor3 = "Outline", AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 1), BackgroundTransparency = 0.3, Parent = TitleBar })
+    Grad(TitleBar, Two("Titlebar", 0.07, -0.025), 90)
     Library:MakeDraggable(Root, TitleBar, true)
 
     local Minimized, Maximized = false, false
@@ -2120,9 +2160,10 @@ function Library:CreateWindow(WindowInfo)
     end
 
     --// Sidebar
-    local Sidebar = New("Frame", { BackgroundColor3 = "Sidebar", BackgroundTransparency = 0, Position = UDim2.fromOffset(0, TitleH), Size = UDim2.new(0, SidebarWidth, 1, -TitleH), Parent = Main })
+    local Sidebar = New("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0, Position = UDim2.fromOffset(0, TitleH), Size = UDim2.new(0, SidebarWidth, 1, -TitleH), Parent = Main })
     New("Frame", { BackgroundColor3 = "Outline", AnchorPoint = Vector2.new(1, 0), BackgroundTransparency = 0.3, Position = UDim2.fromScale(1, 0), Size = UDim2.new(0, 1, 1, 0), Parent = Sidebar })
 
+    Grad(Sidebar, Two("Sidebar", 0.04, -0.02), 90)
     local ChipH = WindowInfo.ShowUserChip and 52 or 0
     local TabsList = New("ScrollingFrame", {
         Size = UDim2.new(1, -1, 1, -ChipH), CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 0, Parent = Sidebar,
@@ -2266,7 +2307,7 @@ function Library:CreateWindow(WindowInfo)
         local function MakeSide(Left)
             local S = New("ScrollingFrame", {
                 AnchorPoint = Vector2.new(Left and 0 or 1, 0), Position = UDim2.fromScale(Left and 0 or 1, 0), Size = UDim2.fromScale(0.5, 1),
-                CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 3, ScrollBarImageColor3 = "Outline", Parent = Container,
+                CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 0, ScrollBarImageTransparency = 1, Parent = Container,
             })
             List(S, 12)
             Pad(S, 4, Left and 8 or 16, 18, Left and 16 or 8)
@@ -2278,6 +2319,37 @@ function Library:CreateWindow(WindowInfo)
             Name = Name, Description = Description, Button = Btn, Container = Container, Sides = { SideLeft, SideRight },
             Groupboxes = {}, Tabboxes = {}, TabVisible = true, Window = Window,
         }
+
+        -- warning / info banner at the top of the page (Obsidian: Tab:UpdateWarningBox)
+        local WarnHolder = New("Frame", { BackgroundColor3 = Color3.fromRGB(110, 20, 20), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.fromOffset(16, 4), Size = UDim2.new(1, -32, 0, 0), Visible = false, Parent = Container })
+        Corner(WarnHolder, 9)
+        local WarnStroke = Stroke(WarnHolder, Color3.fromRGB(255, 69, 58), 1, 0.2)
+        Pad(WarnHolder, 8, 12, 8, 12)
+        List(WarnHolder, 2)
+        local WarnTitle = New("TextLabel", { Size = UDim2.new(1, 0, 0, 16), Text = "", FontFace = "FontBold", TextColor3 = Color3.fromRGB(255, 120, 110), TextXAlignment = Enum.TextXAlignment.Left, Parent = WarnHolder })
+        local WarnText = New("TextLabel", { AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 0, 0), Text = "", TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Parent = WarnHolder })
+
+        function Tab:RefreshSides()
+            local Offset = WarnHolder.Visible and (WarnHolder.AbsoluteSize.Y + 12) or 0
+            SideLeft.Position = UDim2.fromOffset(0, Offset)
+            SideLeft.Size = UDim2.new(0.5, 0, 1, -Offset)
+            SideRight.Position = UDim2.new(1, 0, 0, Offset)
+            SideRight.Size = UDim2.new(0.5, 0, 1, -Offset)
+        end
+        WarnHolder:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() Tab:RefreshSides() end)
+
+        function Tab:UpdateWarningBox(WInfo)
+            WInfo = WInfo or {}
+            if typeof(WInfo.Visible) == "boolean" then WarnHolder.Visible = WInfo.Visible end
+            if typeof(WInfo.Title) == "string" then WarnTitle.Text = WInfo.Title end
+            if typeof(WInfo.Text) == "string" then WarnText.Text = WInfo.Text end
+            if typeof(WInfo.IsNormal) == "boolean" then
+                WarnHolder.BackgroundColor3 = WInfo.IsNormal and Library.Scheme.Card or Color3.fromRGB(110, 20, 20)
+                WarnStroke.Color = WInfo.IsNormal and Library.Scheme.Outline or Color3.fromRGB(255, 69, 58)
+                WarnTitle.TextColor3 = WInfo.IsNormal and Library.Scheme.Text or Color3.fromRGB(255, 120, 110)
+            end
+            task.defer(function() Tab:RefreshSides() end)
+        end
 
         function Tab:RefreshStyle(Hovering)
             local Sel = Library.ActiveTab == Tab
@@ -2383,9 +2455,10 @@ function Library:CreateWindow(WindowInfo)
         function Tab:AddGroupbox(Info)
             Info = Library:Validate(Info, Templates.Groupbox)
 
-            local Card = New("Frame", { BackgroundColor3 = "Card", AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 0, 0), Parent = SideOf(Info.Side) })
+            local Card = New("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), ClipsDescendants = true, AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 0, 0), Parent = SideOf(Info.Side) })
             Corner(Card, 10)
             Stroke(Card, "Outline", 1, 0.5)
+            Grad(Card, Two("Card", 0.035, -0.015), 90)
             List(Card, 0)
 
             local Head = New("TextButton", { Size = UDim2.new(1, 0, 0, 36), LayoutOrder = 1, Parent = Card })
@@ -2449,9 +2522,10 @@ function Library:CreateWindow(WindowInfo)
         --// Tabbox (macOS segmented control)
         function Tab:AddTabbox(Info)
             Info = Library:Validate(Info, Templates.Tabbox)
-            local Card = New("Frame", { BackgroundColor3 = "Card", AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 0, 0), Parent = SideOf(Info.Side) })
+            local Card = New("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), ClipsDescendants = true, AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 0, 0), Parent = SideOf(Info.Side) })
             Corner(Card, 10)
             Stroke(Card, "Outline", 1, 0.5)
+            Grad(Card, Two("Card", 0.035, -0.015), 90)
             List(Card, 0)
 
             local SegWrap = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 44), LayoutOrder = 1, Parent = Card })
@@ -2558,6 +2632,42 @@ function Library:CreateWindow(WindowInfo)
         table.insert(Library.TabList, Tab)
         Tab:RefreshStyle()
         if not Library.ActiveTab then Tab:Show() end
+        return Tab
+    end
+
+    --// Key tab (centered page with a key box, like Obsidian)
+    function Window:AddKeyTab(...)
+        local Info = ...
+        local Name, IconName, Description
+        if typeof(Info) == "table" then
+            Name, IconName, Description = Info.Name or "Key", Info.Icon, Info.Description
+        else
+            Name, IconName, Description = ...
+        end
+        local Tab = Window:AddTab({ Name = Name or "Key", Icon = IconName or "key", Description = Description })
+        Tab.IsKeyTab = true
+        Tab.Sides[1].Visible, Tab.Sides[2].Visible = false, false
+
+        local Body = New("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(0.7, 0, 0, 0), Parent = Tab.Container })
+        List(Body, 10)
+        Tab.Container = Body
+        Tab.Elements, Tab.DependencyBoxes, Tab.Tab = {}, {}, Tab
+
+        function Tab:AddKeyBox(Callback)
+            local Row = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 30), Parent = Body })
+            List(Row, 8, Enum.FillDirection.Horizontal)
+            local Box = New("TextBox", { BackgroundColor3 = "Control", BackgroundTransparency = 0, Size = UDim2.new(0, 0, 1, 0), PlaceholderText = "Key", ClearTextOnFocus = false, TextXAlignment = Enum.TextXAlignment.Left, Parent = Row })
+            Flex(Box)
+            Corner(Box, 7)
+            Pad(Box, 0, 10, 0, 10)
+            Stroke(Box, "Outline", 1, 0.4)
+            local Btn = New("TextButton", { BackgroundColor3 = "Accent", BackgroundTransparency = 0, Size = UDim2.fromOffset(80, 30), Text = "Submit", TextColor3 = "AccentText", FontFace = "FontBold", Parent = Row })
+            Corner(Btn, 7)
+            Btn.MouseButton1Click:Connect(function() Library:SafeCallback(Callback, Box.Text) end)
+            return Box
+        end
+
+        setmetatable(Tab, BaseGroupbox)
         return Tab
     end
 
