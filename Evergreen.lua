@@ -195,7 +195,8 @@ function Library:SetTransparency(T)
         if Frame.Parent then
             Frame.BackgroundTransparency = D.Base + (1 - D.Base) * T * D.Factor
         end
-
+    end
+end
 
 local Templates = {
     Window = {
