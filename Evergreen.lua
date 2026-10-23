@@ -180,6 +180,23 @@ Library.BlurEnabled = false
 Library.BlurSize = 16
 Library.ThemeHooks = {}
 
+
+-- Defined early: used while building keybind HUD / popups before CreateWindow
+function Library:AddSurface(Frame, Base, Factor)
+    Base, Factor = Base or 0, Factor or 1
+    Library.Surfaces[Frame] = { Base = Base, Factor = Factor }
+    Frame.BackgroundTransparency = Base + (1 - Base) * Library.UITransparency * Factor
+end
+
+function Library:SetTransparency(T)
+    T = math.clamp(tonumber(T) or 0, 0, 0.9)
+    Library.UITransparency = T
+    for Frame, D in Library.Surfaces do
+        if Frame.Parent then
+            Frame.BackgroundTransparency = D.Base + (1 - D.Base) * T * D.Factor
+        end
+
+
 local Templates = {
     Window = {
         Title = "Evergreen",
@@ -2972,20 +2989,9 @@ function Library:Notify(...)
 end
 
 --// Window \\--
---// UI transparency + blur \\--
-function Library:AddSurface(Frame, Base, Factor)
-    Base, Factor = Base or 0, Factor or 1
-    Library.Surfaces[Frame] = { Base = Base, Factor = Factor }
-    Frame.BackgroundTransparency = Base + (1 - Base) * Library.UITransparency * Factor
-end
+--// UI transparency + blur \--
+-- AddSurface / SetTransparency defined near top (before keybind HUD)
 
-function Library:SetTransparency(T)
-    T = math.clamp(tonumber(T) or 0, 0, 0.9)
-    Library.UITransparency = T
-    for Frame, D in Library.Surfaces do
-        if Frame.Parent then
-            Frame.BackgroundTransparency = D.Base + (1 - D.Base) * T * D.Factor
-        end
     end
 end
 
